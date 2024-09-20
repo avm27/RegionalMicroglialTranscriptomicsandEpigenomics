@@ -3,8 +3,14 @@ output_dir: ../docs
 navbar:
   title: RegionalMicroglialTranscriptomicsandEpigenomics
   left:
-  - text: Home
+  - text: Regional Microglial RNA-Sequencing Analysis
     href: index.html
+  - text: Regional Microglial WGCNA
+    href: index2.html
+  - text: Regional Microglial CATD-Seqeuncing Analysis
+    href: index3.html
+  - text: Overlapping the Microglial Transcriptome and Epigenome
+    href: index4.html
   - text: About
     href: about.html
   - text: License
@@ -17,5 +23,7 @@ output:
   workflowr::wflow_html:
     toc: yes
     toc_float: yes
-    theme: cosmo
-    highlight: textmate
+    theme: united
+    highlight: tango
+    code_folding: hide
+    number_sections: yes
