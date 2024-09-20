@@ -16,7 +16,7 @@
 <script src="site_libs/header-attrs-2.23/header-attrs.js"></script>
 <script src="site_libs/jquery-3.6.0/jquery-3.6.0.min.js"></script>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<link href="site_libs/bootstrap-3.3.5/css/cosmo.min.css" rel="stylesheet" />
+<link href="site_libs/bootstrap-3.3.5/css/united.min.css" rel="stylesheet" />
 <script src="site_libs/bootstrap-3.3.5/js/bootstrap.min.js"></script>
 <script src="site_libs/bootstrap-3.3.5/shim/html5shiv.min.js"></script>
 <script src="site_libs/bootstrap-3.3.5/shim/respond.min.js"></script>
@@ -30,8 +30,9 @@
        code {color: inherit; background-color: rgba(0, 0, 0, 0.04);}
        pre:not([class]) { background-color: white }</style>
 <script src="site_libs/navigation-1.1/tabsets.js"></script>
-<link href="site_libs/highlightjs-9.12.0/textmate.css" rel="stylesheet" />
-<script src="site_libs/highlightjs-9.12.0/highlight.js"></script>
+<script src="site_libs/navigation-1.1/codefolding.js"></script>
+<link href="site_libs/font-awesome-6.4.0/css/all.min.css" rel="stylesheet" />
+<link href="site_libs/font-awesome-6.4.0/css/v4-shims.min.css" rel="stylesheet" />
 
 <link rel="icon" href="https://github.com/workflowr/workflowr-assets/raw/main/img/reproducible.png">
 <!-- Add a small amount of space between sections. -->
@@ -52,16 +53,6 @@ div.section {
   ul.task-list{list-style: none;}
     </style>
 
-<style type="text/css">code{white-space: pre;}</style>
-<script type="text/javascript">
-if (window.hljs) {
-  hljs.configure({languages: []});
-  hljs.initHighlightingOnLoad();
-  if (document.readyState && document.readyState === "complete") {
-    window.setTimeout(function() { hljs.initHighlighting(); }, 0);
-  }
-}
-</script>
 
 
 
@@ -226,6 +217,9 @@ $(document).ready(function () {
 </style>
 
 <!-- code folding -->
+<style type="text/css">
+.code-folding-btn { margin-bottom: 4px; }
+</style>
 
 
 
@@ -253,7 +247,16 @@ $(document).ready(function () {
     <div id="navbar" class="navbar-collapse collapse">
       <ul class="nav navbar-nav">
         <li>
-  <a href="index.html">Home</a>
+  <a href="index.html">Regional Microglial RNA-Sequencing Analysis</a>
+</li>
+<li>
+  <a href="index2.html">Regional Microglial WGCNA</a>
+</li>
+<li>
+  <a href="index3.html">Regional Microglial CATD-Seqeuncing Analysis</a>
+</li>
+<li>
+  <a href="index4.html">Overlapping the Microglial Transcriptome and Epigenome</a>
 </li>
 <li>
   <a href="about.html">About</a>
@@ -263,13 +266,27 @@ $(document).ready(function () {
 </li>
       </ul>
       <ul class="nav navbar-nav navbar-right">
-        
+        <li>
+  <a href="https://github.com/avm27/RegionalMicroglialTranscriptomicsandEpigenomics">
+    <span class="fab fa-github"></span>
+     
+    Source code
+  </a>
+</li>
       </ul>
     </div><!--/.nav-collapse -->
   </div><!--/.container -->
 </div><!--/.navbar -->
 
 <div id="header">
+
+<div class="btn-group pull-right float-right">
+<button type="button" class="btn btn-default btn-xs btn-secondary btn-sm dropdown-toggle" data-toggle="dropdown" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false"><span>Code</span> <span class="caret"></span></button>
+<ul class="dropdown-menu dropdown-menu-right" style="min-width: 50px;">
+<li><a id="rmd-show-all-code" href="#">Show All Code</a></li>
+<li><a id="rmd-hide-all-code" href="#">Hide All Code</a></li>
+</ul>
+</div>
 
 
 
@@ -302,7 +319,7 @@ class="glyphicon glyphicon-ok text-success" aria-hidden="true"></span>
 <div class="tab-content">
 <div id="summary" class="tab-pane fade in active">
 <p>
-<strong>Last updated:</strong> 2024-08-08
+<strong>Last updated:</strong> 2024-09-20
 </p>
 <p>
 <strong>Checks:</strong> <span
@@ -350,13 +367,15 @@ results.</p>
 <div class="panel panel-default">
 <div class="panel-heading">
 <p class="panel-title">
-<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongRepositoryversionstrongb1b9923">
+<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongRepositoryversionstrongahrefhttpsgithubcomavm27RegionalMicroglialTranscriptomicsandEpigenomicstree2d89e216f3096a19e4b0a0f7021a560dae5d1038targetblank2d89e21a">
 <span class="glyphicon glyphicon-ok text-success"
-aria-hidden="true"></span> <strong>Repository version:</strong> b1b9923
+aria-hidden="true"></span> <strong>Repository version:</strong>
+<a href="https://github.com/avm27/RegionalMicroglialTranscriptomicsandEpigenomics/tree/2d89e216f3096a19e4b0a0f7021a560dae5d1038" target="_blank">2d89e21</a>
 </a>
 </p>
 </div>
-<div id="strongRepositoryversionstrongb1b9923"
+<div
+id="strongRepositoryversionstrongahrefhttpsgithubcomavm27RegionalMicroglialTranscriptomicsandEpigenomicstree2d89e216f3096a19e4b0a0f7021a560dae5d1038targetblank2d89e21a"
 class="panel-collapse collapse">
 <div class="panel-body">
 <p>
@@ -365,7 +384,8 @@ and connecting the code version to the results is critical for
 reproducibility.
 </p>
 <p>
-The results in this page were generated with repository version b1b9923.
+The results in this page were generated with repository version
+<a href="https://github.com/avm27/RegionalMicroglialTranscriptomicsandEpigenomics/tree/2d89e216f3096a19e4b0a0f7021a560dae5d1038" target="_blank">2d89e21</a>.
 See the <em>Past versions</em> tab to see a history of the changes made
 to the R Markdown and HTML files.
 </p>
@@ -379,7 +399,13 @@ depends on. Below is the status of the Git repository when the results
 were generated:
 </p>
 <pre><code>
-working directory clean
+Untracked files:
+    Untracked:  WorkFlowR_BRmic_Setup.txt
+    Untracked:  code/BRMic_RNASeq_PreProcessingCodeFinal.sh
+
+Unstaged changes:
+    Modified:   README.md
+
 </code></pre>
 <p>
 Note that any generated files, e.g. HTML, png, CSS, etc., are not
@@ -429,7 +455,41 @@ Message
 Rmd
 </td>
 <td>
-b1b9923
+<a href="https://github.com/avm27/RegionalMicroglialTranscriptomicsandEpigenomics/blob/2d89e216f3096a19e4b0a0f7021a560dae5d1038/analysis/license.Rmd" target="_blank">2d89e21</a>
+</td>
+<td>
+avm27
+</td>
+<td>
+2024-09-20
+</td>
+<td>
+Publishing updated files
+</td>
+</tr>
+<tr>
+<td>
+html
+</td>
+<td>
+<a href="https://rawcdn.githack.com/avm27/RegionalMicroglialTranscriptomicsandEpigenomics/a2699017f67cf18b0bd42e1fe732acf89e0a907f/docs/license.html" target="_blank">a269901</a>
+</td>
+<td>
+avm27
+</td>
+<td>
+2024-08-08
+</td>
+<td>
+Build site.
+</td>
+</tr>
+<tr>
+<td>
+Rmd
+</td>
+<td>
+<a href="https://github.com/avm27/RegionalMicroglialTranscriptomicsandEpigenomics/blob/b1b9923e5a3889da0f2c45e51f7ad5090d204001/analysis/license.Rmd" target="_blank">b1b9923</a>
 </td>
 <td>
 avm27
@@ -448,17 +508,24 @@ Start workflowr project.
 </div>
 </div>
 </div>
-<p>What license are you using for your code? See <a
-href="https://choosealicense.com/">choosealicense.com</a> for help
-deciding. It’s a convention to save a file <code>LICENSE</code> in the
-root of your Git repo that contains the license text.</p>
-<p>What license are you using for the written content on your site? It
-is traditional to choose a <a
-href="https://creativecommons.org/choose/">Creative Commons</a> license
-for this type of content.</p>
-<p>How should others cite your work? It’s a convention to save a file
-<code>CITATION</code> in the root of your Git repo that contains the
-citation information.</p>
+<p>MIT License</p>
+<p>Copyright (c) [2023] [Alexander Margetts, Luis Tuesta]</p>
+<p>Permission is hereby granted, free of charge, to any person obtaining
+a copy of this software and associated documentation files (the
+“Software”), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:</p>
+<p>The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.</p>
+<p>THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.</p>
 
 
 <!-- Adjust MathJax settings so that all math formulae are shown using
@@ -507,6 +574,11 @@ $(document).ready(function () {
 </script>
 
 <!-- code folding -->
+<script>
+$(document).ready(function () {
+  window.initializeCodeFolding("hide" === "show");
+});
+</script>
 
 
 <!-- dynamically load mathjax for compatibility with self-contained -->
