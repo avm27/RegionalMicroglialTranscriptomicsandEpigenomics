@@ -1,6 +1,6 @@
 # Regional Microglial Transcriptomics and Epigenomics
 
-Alexander V. Margetts1-3†, Samara J. Vilca1,2, Florence Bourgain-Guglielmetti1-3 & Luis M. Tuesta1-3*
+Alexander V. Margetts1-3, Samara J. Vilca1,2, Florence Bourgain-Guglielmetti1-3 & Luis M. Tuesta1-3*
 
 1 Department of Psychiatry & Behavioral Sciences
 2 Center for Therapeutic Innovation
