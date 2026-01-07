@@ -1,0 +1,11 @@
+samplename,condition
+PFC8,PreFrontalCortex
+PFC9,PreFrontalCortex
+STR8,Striatum
+STR9,Striatum
+VTA8,VTA
+VTA9,VTA
+CTX8,Cortex
+CTX9,Cortex
+HPP8,Hippocampus
+HPP9,Hippocampus

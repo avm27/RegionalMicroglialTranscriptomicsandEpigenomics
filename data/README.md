@@ -1,3 +1,3 @@
 # Data
 
-Save raw data files here.
+Raw data files for input into analyses can be found here.
