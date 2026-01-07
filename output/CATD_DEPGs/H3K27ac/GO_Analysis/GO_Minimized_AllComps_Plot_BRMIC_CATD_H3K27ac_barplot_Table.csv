@@ -1,0 +1,53 @@
+"","ontology","parent","score","parentTerm","Dataset","Region","Comparison","log_pvalue"
+"1","BP","GO:0006929",1.55958547351504,"Substrate-dependent cell migration","STR vs PFC","STR","PFC",1.55958547351504
+"2","BP","GO:0007272",6.09655981900503,"Ensheathment of neurons","VTA vs CTX","VTA","CTX",6.09655981900503
+"3","BP","GO:0007605",1.90846190765911,"Sensory perception of sound","PFC vs STR","PFC","STR",1.90846190765911
+"4","BP","GO:0030098",4.41409522819704,"Lymphocyte differentiation","CTX vs STR","CTX","STR",4.41409522819704
+"5","BP","GO:0030183",4.41409522819704,"B cell differentiation","CTX vs STR","CTX","STR",4.41409522819704
+"6","BP","GO:0030509",5.04896897004054,"Bmp signaling pathway","HPP vs STR","HPP","STR",5.04896897004054
+"7","BP","GO:0032488",1.55958547351504,"Cdc42 protein signal transduction","STR vs PFC","STR","PFC",1.55958547351504
+"8","BP","GO:0032878",1.55958547351504,"Regulation of establishment or maintenance of cell polarity","STR vs PFC","STR","PFC",1.55958547351504
+"9","BP","GO:0042552",4.21841856767025,"Myelination","VTA vs PFC","VTA","PFC",4.21841856767025
+"10","BP","GO:0045765",2.03499215389296,"Regulation of angiogenesis","CTX vs STR","CTX","STR",2.03499215389296
+"11","BP","GO:0050853",1.59048168585089,"B cell receptor signaling pathway","CTX vs STR","CTX","STR",1.59048168585089
+"12","BP","GO:0071361",2.09210630460525,"Cellular response to ethanol","PFC vs STR","PFC","STR",2.09210630460525
+"13","BP","GO:0090092",2.73604168028199,"Regulation of transmembrane receptor protein
+Serine/threonine kinase signaling pathway","HPP vs STR","HPP","STR",2.73604168028199
+"14","BP","GO:1990823",1.90846190765911,"Response to leukemia inhibitory factor","PFC vs STR","PFC","STR",1.90846190765911
+"15","BP","GO:2001224",1.55958547351504,"Positive regulation of neuron migration","STR vs PFC","STR","PFC",1.55958547351504
+"16","CC","GO:0005604",3.74114598012505,"Basement membrane","HPP vs STR","HPP","STR",3.74114598012505
+"17","CC","GO:0005604",4.86921415382403,"Basement membrane","HPP vs CTX","HPP","CTX",4.86921415382403
+"18","CC","GO:0005875",1.52666144838049,"Microtubule associated complex","STR vs PFC","STR","PFC",1.52666144838049
+"19","CC","GO:0005911",2.16820897531254,"Cell-cell junction","VTA vs CTX","VTA","CTX",2.16820897531254
+"20","CC","GO:0015629",3.09156033735517,"Actin cytoskeleton","HPP vs CTX","HPP","CTX",3.09156033735517
+"21","CC","GO:0030055",2.13056785702631,"Cell-substrate junction","CTX vs PFC","CTX","PFC",2.13056785702631
+"22","CC","GO:0030426",1.94073526345092,"Growth cone","VTA vs CTX","VTA","CTX",1.94073526345092
+"23","CC","GO:0031012",1.94073526345092,"Extracellular matrix","VTA vs CTX","VTA","CTX",1.94073526345092
+"24","CC","GO:0031252",1.81597310669101,"Cell leading edge","VTA vs CTX","VTA","CTX",1.81597310669101
+"25","CC","GO:0031252",3.26758386591316,"Cell leading edge","VTA vs PFC","VTA","PFC",3.26758386591316
+"26","CC","GO:0031253",2.62736374596141,"Cell projection membrane","HPP vs CTX","HPP","CTX",2.62736374596141
+"27","CC","GO:0031256",4.20096083731923,"Leading edge membrane","HPP vs CTX","HPP","CTX",4.20096083731923
+"28","CC","GO:0042734",1.94073526345092,"Presynaptic membrane","VTA vs CTX","VTA","CTX",1.94073526345092
+"29","CC","GO:0043209",1.79764912961177,"Myelin sheath","VTA vs CTX","VTA","CTX",1.79764912961177
+"30","CC","GO:0045177",3.63579586396083,"Apical part of cell","HPP vs PFC","HPP","PFC",3.63579586396083
+"31","CC","GO:0045177",4.86921415382403,"Apical part of cell","HPP vs CTX","HPP","CTX",4.86921415382403
+"32","CC","GO:0098871",2.97636297510708,"Postsynaptic actin cytoskeleton","HPP vs CTX","HPP","CTX",2.97636297510708
+"33","CC","GO:0098978",2.0000586417514,"Glutamatergic synapse","VTA vs CTX","VTA","CTX",2.0000586417514
+"34","CC","GO:0150034",3.2854417323415,"Distal axon","VTA vs CTX","VTA","CTX",3.2854417323415
+"35","MF","GO:0003779",3.84667746708923,"Actin binding","HPP vs STR","HPP","STR",3.84667746708923
+"36","MF","GO:0003779",4.64060792098196,"Actin binding","HPP vs CTX","HPP","CTX",4.64060792098196
+"37","MF","GO:0015026",2.00139691167825,"Coreceptor activity","CTX vs STR","CTX","STR",2.00139691167825
+"38","MF","GO:0019894",1.71381773281082,"Kinesin binding","STR vs PFC","STR","PFC",1.71381773281082
+"39","MF","GO:0019894",1.74287370825352,"Kinesin binding","STR vs CTX","STR","CTX",1.74287370825352
+"40","MF","GO:0019902",1.54289678474071,"Phosphatase binding","CTX vs STR","CTX","STR",1.54289678474071
+"41","MF","GO:0019955",1.47624486314252,"Cytokine binding","CTX vs STR","CTX","STR",1.47624486314252
+"42","MF","GO:0030159",1.81915996030436,"Signaling receptor complex adaptor activity","STR vs CTX","STR","CTX",1.81915996030436
+"43","MF","GO:0030228",1.87947670074083,"Lipoprotein particle receptor activity","VTA vs CTX","VTA","CTX",1.87947670074083
+"44","MF","GO:0031690",1.81915996030436,"Adrenergic receptor binding","STR vs CTX","STR","CTX",1.81915996030436
+"45","MF","GO:0031994",1.93619728531037,"Insulin-like growth factor i binding","CTX vs PFC","CTX","PFC",1.93619728531037
+"46","MF","GO:0033612",1.81915996030436,"Receptor serine/threonine kinase binding","STR vs CTX","STR","CTX",1.81915996030436
+"47","MF","GO:0042578",1.63674481574447,"Phosphoric ester hydrolase activity","CTX vs STR","CTX","STR",1.63674481574447
+"48","MF","GO:0046332",1.6020578942308,"Smad binding","STR vs CTX","STR","CTX",1.6020578942308
+"49","MF","GO:0098879",1.81915996030436,"Structural constituent of postsynaptic specialization","STR vs CTX","STR","CTX",1.81915996030436
+"50","MF","GO:0140297",2.00139691167825,"Dna-binding transcription factor binding","CTX vs STR","CTX","STR",2.00139691167825
+"51","MF","GO:0140375",1.98498834072475,"Immune receptor activity","CTX vs STR","CTX","STR",1.98498834072475

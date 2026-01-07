@@ -1,0 +1,60 @@
+"","ontology","parent","score","parentTerm","Dataset","Region","Comparison","log_pvalue"
+"1","BP","GO:0001832",1.95215656232277,"Blastocyst growth","PFC vs STR","PFC","STR",1.95215656232277
+"2","BP","GO:0001974",1.95215656232277,"Blood vessel remodeling","PFC vs STR","PFC","STR",1.95215656232277
+"3","BP","GO:0002262",1.56774068426734,"Myeloid cell homeostasis","VTA vs CTX","VTA","CTX",1.56774068426734
+"4","BP","GO:0003301",1.95215656232277,"Physiological cardiac muscle hypertrophy","PFC vs STR","PFC","STR",1.95215656232277
+"5","BP","GO:0007018",1.641513657304,"Microtubule-based movement","CTX vs HPP","CTX","HPP",1.641513657304
+"6","BP","GO:0007030",1.81439977648447,"Golgi organization","CTX vs HPP","CTX","HPP",1.81439977648447
+"7","BP","GO:0007519",1.7347275247521,"Skeletal muscle tissue development","STR vs CTX","STR","CTX",1.7347275247521
+"8","BP","GO:0007530",1.80703897830402,"Sex determination","CTX vs STR","CTX","STR",1.80703897830402
+"9","BP","GO:0010828",1.95215656232277,"Positive regulation of glucose transmembrane transport","PFC vs STR","PFC","STR",1.95215656232277
+"10","BP","GO:0010893",1.95215656232277,"Positive regulation of steroid biosynthetic process","PFC vs STR","PFC","STR",1.95215656232277
+"11","BP","GO:0010970",1.81439977648447,"Transport along microtubule","CTX vs HPP","CTX","HPP",1.81439977648447
+"12","BP","GO:0014009",2.30736726881597,"Glial cell proliferation","VTA vs CTX","VTA","CTX",2.30736726881597
+"13","BP","GO:0014904",1.95215656232277,"Myotube cell development","PFC vs STR","PFC","STR",1.95215656232277
+"14","BP","GO:0016339",1.60876288573955,"Calcium-dependent cell-cell adhesion via plasma membrane
+Cell adhesion molecules","VTA vs STR","VTA","STR",1.60876288573955
+"15","BP","GO:0021930",1.95215656232277,"Cerebellar granule cell precursor proliferation","PFC vs STR","PFC","STR",1.95215656232277
+"16","BP","GO:0030100",1.81439977648447,"Regulation of endocytosis","CTX vs HPP","CTX","HPP",1.81439977648447
+"17","BP","GO:0031641",1.95215656232277,"Regulation of myelination","PFC vs STR","PFC","STR",1.95215656232277
+"18","BP","GO:0042531",1.33780311778151,"Positive regulation of tyrosine phosphorylation of stat
+Protein","VTA vs CTX","VTA","CTX",1.33780311778151
+"19","BP","GO:0048511",1.71039494671181,"Rhythmic process","STR vs CTX","STR","CTX",1.71039494671181
+"20","BP","GO:0050427",3.93302426495573,"3'-phosphoadenosine 5'-phosphosulfate metabolic process","HPP vs STR","HPP","STR",3.93302426495573
+"21","BP","GO:0050807",4.55866622680428,"Regulation of synapse organization","HPP vs PFC","HPP","PFC",4.55866622680428
+"22","BP","GO:0051645",2.32468939445685,"Golgi localization","CTX vs HPP","CTX","HPP",2.32468939445685
+"23","BP","GO:0051657",2.32468939445685,"Maintenance of organelle location","CTX vs HPP","CTX","HPP",2.32468939445685
+"24","BP","GO:0051923",3.57550555295358,"Sulfation","HPP vs STR","HPP","STR",3.57550555295358
+"25","BP","GO:0060537",1.66151676381159,"Muscle tissue development","STR vs CTX","STR","CTX",1.66151676381159
+"26","BP","GO:0070102",1.35286591747873,"Interleukin-6-mediated signaling pathway","VTA vs CTX","VTA","CTX",1.35286591747873
+"27","BP","GO:0097485",3.86492119604467,"Neuron projection guidance","HPP vs PFC","HPP","PFC",3.86492119604467
+"28","BP","GO:0098742",5.40832380875239,"Cell-cell adhesion via plasma-membrane adhesion molecules","HPP vs STR","HPP","STR",5.40832380875239
+"29","BP","GO:0098742",11.3040765215399,"Cell-cell adhesion via plasma-membrane adhesion molecules","HPP vs PFC","HPP","PFC",11.3040765215399
+"30","BP","GO:0099054",5.40832380875239,"Presynapse assembly","HPP vs STR","HPP","STR",5.40832380875239
+"31","BP","GO:0099054",7.18319105607631,"Presynapse assembly","HPP vs PFC","HPP","PFC",7.18319105607631
+"32","BP","GO:0099111",1.81439977648447,"Microtubule-based transport","CTX vs HPP","CTX","HPP",1.81439977648447
+"33","BP","GO:1903131",1.58702807951531,"Mononuclear cell differentiation","VTA vs CTX","VTA","CTX",1.58702807951531
+"34","CC","GO:0005614",2.47843120838581,"Interstitial matrix","PFC vs STR","PFC","STR",2.47843120838581
+"35","CC","GO:0005925",1.5191852147324,"Focal adhesion","VTA vs STR","VTA","STR",1.5191852147324
+"36","CC","GO:0016342",2.45586443966813,"Catenin complex","VTA vs STR","VTA","STR",2.45586443966813
+"37","CC","GO:0016342",4.72988387818372,"Catenin complex","HPP vs PFC","HPP","PFC",4.72988387818372
+"38","CC","GO:0031012",1.72592909910126,"Extracellular matrix","STR vs VTA","STR","VTA",1.72592909910126
+"39","CC","GO:0031012",2.05054448896381,"Extracellular matrix","STR vs HPP","STR","HPP",2.05054448896381
+"40","CC","GO:0031012",2.71907671471183,"Extracellular matrix","PFC vs HPP","PFC","HPP",2.71907671471183
+"41","CC","GO:0031091",2.47843120838581,"Platelet alpha granule","PFC vs STR","PFC","STR",2.47843120838581
+"42","CC","GO:0035686",1.34242110905162,"Sperm fibrous sheath","VTA vs STR","VTA","STR",1.34242110905162
+"43","CC","GO:0043292",1.43836813545922,"Contractile fiber","VTA vs STR","VTA","STR",1.43836813545922
+"44","CC","GO:0043679",1.6626397063407,"Axon terminus","STR vs HPP","STR","HPP",1.6626397063407
+"45","CC","GO:0043679",1.69859635574823,"Axon terminus","STR vs VTA","STR","VTA",1.69859635574823
+"46","CC","GO:0090575",1.66761084124887,"Rna polymerase ii transcription regulator complex","STR vs CTX","STR","CTX",1.66761084124887
+"47","CC","GO:0097524",1.5191852147324,"Sperm plasma membrane","VTA vs STR","VTA","STR",1.5191852147324
+"48","CC","GO:0098857",1.5191852147324,"Membrane microdomain","VTA vs STR","VTA","STR",1.5191852147324
+"49","CC","GO:0098982",4.68974087167141,"Gaba-ergic synapse","HPP vs PFC","HPP","PFC",4.68974087167141
+"50","CC","GO:0099056",2.05054448896381,"Integral component of presynaptic membrane","STR vs HPP","STR","HPP",2.05054448896381
+"51","CC","GO:0099240",4.13483136959264,"Intrinsic component of synaptic membrane","HPP vs STR","HPP","STR",4.13483136959264
+"52","CC","GO:0099240",7.11907845569948,"Intrinsic component of synaptic membrane","HPP vs PFC","HPP","PFC",7.11907845569948
+"53","MF","GO:0001216",1.64619848846887,"Dna-binding transcription activator activity","STR vs CTX","STR","CTX",1.64619848846887
+"54","MF","GO:0005096",1.63326321782539,"Gtpase activator activity","CTX vs HPP","CTX","HPP",1.63326321782539
+"55","MF","GO:0005159",1.99636571534491,"Insulin-like growth factor receptor binding","PFC vs STR","PFC","STR",1.99636571534491
+"56","MF","GO:0042393",3.29531150744678,"Histone binding","CTX vs STR","CTX","STR",3.29531150744678
+"57","MF","GO:0140034",3.96007930256429,"Methylation-dependent protein binding","CTX vs STR","CTX","STR",3.96007930256429
