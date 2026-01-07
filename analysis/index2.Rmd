@@ -1,11 +1,1216 @@
 ---
-title: "Home"
+title: "BRMic WGCNA Workflow"
 site: workflowr::wflow_site
 output:
   workflowr::wflow_html:
     toc: false
 editor_options:
-  chunk_output_type: console
+  chunk_output_type: inline
 ---
 
-Welcome to my research website.
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(eval = FALSE, include = FALSE)
+if (!("DESeq2" %in% installed.packages())) {
+  # Install this package if it isn't installed yet
+  BiocManager::install("DESeq2", update = FALSE)
+}
+
+if (!("impute" %in% installed.packages())) {
+  # Install this package if it isn't installed yet
+  BiocManager::install("impute")
+}
+
+if (!("WGCNA" %in% installed.packages())) {
+  # Install this package if it isn't installed yet
+  install.packages("WGCNA")
+}
+
+if (!("ggforce" %in% installed.packages())) {
+  # Install this package if it isn't installed yet
+  install.packages("ggforce")
+}
+
+if (!("ComplexHeatmap" %in% installed.packages())) {
+  # Install this package if it isn't installed yet
+  BiocManager::install("ComplexHeatmap")
+}
+
+
+# Attach the DESeq2 library
+library(BiocParallel)
+
+library(conflicted)
+
+# We will need this so we can use the pipe: %>%
+library(magrittr)
+
+# We'll need this for finding gene modules
+library(WGCNA)
+
+# Attach the DESeq2 library
+library(DESeq2)
+
+# We will need this so we can use the pipe: %>%
+library(magrittr)
+
+# We'll be making some plots
+library(ggplot2)
+
+# Need this for annotations
+library(org.Mm.eg.db)
+
+# Need this for annotations
+library(AnnotationDbi)
+
+# Need this for plotting GO enrichment
+library(enrichplot)
+
+# Need this for analyzing GO enrichment
+library(clusterProfiler)
+
+register(DoparParam())
+register(MulticoreParam())
+registered() 
+#bpparam("SnowParam")
+options(warn = 0)
+allowWGCNAThreads()
+options(stringsAsFactors = FALSE)
+
+```
+
+
+# Load and Setup Data
+## Setting up Working Directory
+```{r Read In Files, message=FALSE, warning=FALSE, include=FALSE}
+# Set Working Directory
+
+setwd("/home/avm27/Documents/Raw_Sequencing_Data/BrainRegionMicroglia/RegionalMicroglialTranscriptomicsandEpigenomics")
+
+projdir <- "/home/avm27/Documents/Raw_Sequencing_Data/BrainRegionMicroglia/RegionalMicroglialTranscriptomicsandEpigenomics"
+
+# Define the file path to the plots directory
+plots_dir <- paste0(projdir, "/output/WGCNA/plots")
+
+# Create the plots folder if it doesn't exist
+if (!dir.exists(plots_dir)) {
+  dir.create(plots_dir)
+}
+
+# Define the file path to the results directory
+results_dir <- paste0(projdir, "/output/WGCNA/results")
+
+# Create the results folder if it doesn't exist
+if (!dir.exists(results_dir)) {
+  dir.create(results_dir)
+}
+
+# Define the file path to the results directory
+rdata_dir <- paste0(projdir, "/output/WGCNA/r_data")
+
+# Create the results folder if it doesn't exist
+if (!dir.exists(rdata_dir)) {
+  dir.create(rdata_dir)
+}
+
+
+# Define the file path to the data directory
+data_dir <- file.path("data", "RNASeq_WGCNA")
+
+# Declare the file path to the gene expression matrix file
+data_file <- file.path(paste0(projdir,"/", data_dir), "BRMIC_gene_count_matrix.csv")
+
+# Declare the file path to the metadata file
+metadata_file <- file.path(paste0(projdir,"/", data_dir), "BRMIC_Metadata.tsv")
+
+file.exists(data_file)
+file.exists(metadata_file)
+
+```
+
+
+## Import and Set Up Data
+
+```{r pressure, include=FALSE}
+# Read in metadata TSV file
+metadata <- readr::read_tsv(metadata_file)
+
+# Read in data TSV file
+df <- readr::read_csv(data_file, show_col_types = TRUE) %>%
+  tibble::column_to_rownames("gene_id")
+
+head(df)
+
+# Make the data in the order of the metadata
+df <- df %>%
+  dplyr::select(metadata$refinebio_accession_code)
+
+# Check if this is in the same order
+all.equal(colnames(df), metadata$refinebio_accession_code)
+
+```
+
+```{r Prepare Data for DESeq2, include=FALSE}
+# The next DESeq2 functions need the values to be converted to integers
+df <- round(df) %>%
+  # The next steps require a data frame and round() returns a matrix
+  as.data.frame() %>%
+  # Only keep rows that have total counts above the cutoff
+  dplyr::filter(rowSums(.) >= 50)
+
+
+metadata <- metadata %>%
+  dplyr::mutate(
+    time_point = dplyr::case_when(
+      stringr::str_detect(refinebio_title, "Cortex") ~ "CTX",
+      stringr::str_detect(refinebio_title, "Hippocampus") ~ "HPP",
+      stringr::str_detect(refinebio_title, "PreFrontalCtx") ~ "PFC",
+      stringr::str_detect(refinebio_title, "Striatum") ~ "STR",
+      stringr::str_detect(refinebio_title, "VentralTegmentalArea") ~ "VTA"
+    ),
+    time_point = as.factor(time_point)
+  )
+
+levels(metadata$time_point)
+
+```
+
+```{r Create DESeq2 Object, include=FALSE}
+
+# Create a `DESeqDataSet` object
+dds <- DESeqDataSetFromMatrix(
+  countData = df, # Our prepped data frame with counts
+  colData = metadata, # Data frame with annotation for our samples
+  design = ~1
+)
+
+# Normalize and transform the data in the `DESeqDataSet` object using the `vst()`
+# function from the `DESEq2` R package
+dds_norm <- vst(dds)
+
+df <- assay(dds_norm) %>% as.data.frame
+
+datExpr0 = as.data.frame(t(df));
+names(datExpr0) = rownames(df);
+rownames(datExpr0) = names(df);
+
+```
+
+# WCGNA
+
+## Set Up
+```{r Check if samples are good to run, echo=TRUE}
+
+gsg = goodSamplesGenes(datExpr0, verbose = 3);
+gsg$allOK
+
+sampleTree = hclust(dist(datExpr0), method = "average");
+##pdf(file = paste0(plots_dir, "/sampleClustering--withoutCuts--PreOutlierRemoval.pdf"), width = 12, height = 9);
+par(cex = 0.6);
+par(mar = c(0,4,2,0))
+plot(sampleTree, main = "Sample clustering to detect outliers -- Without Cuts", sub="", xlab="", cex.lab = 1.5,
+cex.axis = 1.5, cex.main = 2)
+#dev.off()
+
+#pdf(file = paste0(plots_dir, "/sampleClustering--withCuts--PreOutlierRemoval.pdf"), width = 12, height = 9);
+par(cex = 0.6);
+par(mar = c(0,4,2,0))
+plot(sampleTree, main = "Sample clustering to detect outliers -- With Cuts", sub="", xlab="", cex.lab = 1.5,
+cex.axis = 1.5, cex.main = 2)
+abline(h = 50, col = "red");
+#dev.off()
+
+
+clust = cutreeStatic(sampleTree, cutHeight = 40, minSize = 2)
+table(clust)
+
+
+# clust 1 contains the samples we want to keep.
+keepSamples = (clust>=1)
+datExpr = datExpr0[keepSamples, ]
+nGenes = ncol(datExpr)
+nSamples = nrow(datExpr)
+clust
+rownames(datExpr)
+
+sampleTree = hclust(dist(datExpr), method = "average");
+#pdf(file = paste0(plots_dir, "/SampleClustering--PreOutlierRemoval..pdf"), width = 12, height = 9);
+par(cex = 0.6);
+par(mar = c(0,4,2,0))
+plot(sampleTree, main = "Sample clustering to detect outliers -- Final", sub="", xlab="", cex.lab = 1.5,
+cex.axis = 1.5, cex.main = 2)
+#dev.off()
+
+
+
+```
+
+## Import and Set Up Data
+
+Based on the above sample clustering, we find that MCTX4 and MCTX7 are outliers to the CTX group as the cluster towards the HPP samples. Furthermore, analysis reveals that these two CTX samples may exhibit infiltration of microglia from other regions, causing their transcriptomes to more closely align with HPP samples. MVTA8 is also an outlier along with MVTA6 and MVTA8. These samples are removed and the data are reloaded to help re-define the paramenters for input into WGCNA.
+
+```{r Setup 1, include=FALSE}
+# Read in metadata TSV file
+metadata <- readr::read_tsv(metadata_file)
+
+# Read in data TSV file
+df <- readr::read_csv(data_file, show_col_types = TRUE) %>%
+  # Here we are going to store the gene IDs as row names so that we can have a numeric matrix to perform calculations on later
+  tibble::column_to_rownames("gene_id")
+
+head(df)
+
+# Make the data in the order of the metadata
+df <- df %>%
+  dplyr::select(metadata$refinebio_accession_code)
+
+# Check if this is in the same order
+all.equal(colnames(df), metadata$refinebio_accession_code)
+
+```
+
+```{r Prepare Data for DESeq2, echo=TRUE, message=TRUE, warning=FALSE, paged.print=TRUE}
+# The next DESeq2 functions need the values to be converted to integers
+df <- round(df) %>%
+  as.data.frame() %>%
+  dplyr::filter(rowSums(.) >= 50)
+
+
+## Removing MCTX4 MCTX7 MVTA6 and MVTA8 From Analysis
+colnames(df)
+
+df <- df[-c(1,4,25,27)]
+metadata <- metadata[-c(1,4,25,27), ]
+
+metadata <- metadata %>%
+  dplyr::mutate(
+    time_point = dplyr::case_when(
+      stringr::str_detect(refinebio_title, "Cortex") ~ "CTX",
+      stringr::str_detect(refinebio_title, "Hippocampus") ~ "HPP",
+      stringr::str_detect(refinebio_title, "PreFrontalCtx") ~ "PFC",
+      stringr::str_detect(refinebio_title, "Striatum") ~ "STR",
+      stringr::str_detect(refinebio_title, "VentralTegmentalArea") ~ "VTA"
+    ),
+    time_point = as.factor(time_point)
+  )
+
+```
+
+```{r Create DESeq2 Object, echo=TRUE}
+
+# Create a `DESeqDataSet` object
+dds <- DESeqDataSetFromMatrix(
+  countData = df, # Our prepped data frame with counts
+  colData = metadata, # Data frame with annotation for our samples
+  design = ~1 
+)
+
+# Normalize and transform the data in the `DESeqDataSet` object using the `vst()` function from the `DESEq2` R package
+dds_norm <- vst(dds)
+
+# Retrieve the normalized data from the `DESeqDataSet`
+normalized_counts_wcgna_mivsa <- assay(dds_norm) %>%
+  t() # Transpose this data
+
+df <- assay(dds_norm) %>% as.data.frame
+
+datExpr0 = as.data.frame(t(df));
+names(datExpr0) = rownames(df);
+rownames(datExpr0) = names(df);
+
+
+```
+
+# WCGNA after outlier removal
+
+## Set Up
+```{r Check if samples are good to run, echo=TRUE, fig.height=8, fig.width=8, message=FALSE, warning=FALSE}
+
+gsg = goodSamplesGenes(datExpr0, verbose = 3);
+gsg$allOK
+
+sampleTree = hclust(dist(datExpr0), method = "average");
+#pdf(file = paste0(plots_dir, "/sampleClustering--withoutCuts-PostOutlierRemoval.pdf"), width = 12, height = 9);
+par(cex = 0.6);
+par(mar = c(0,4,2,0))
+plot(sampleTree, main = "Sample clustering to detect outliers -- Without Cuts", sub="", xlab="", cex.lab = 1.5,
+cex.axis = 1.5, cex.main = 2)
+#dev.off()
+
+#pdf(file = paste0(plots_dir, "/sampleClustering--withCuts-PostOutlierRemoval.pdf"), width = 12, height = 9);
+par(cex = 0.6);
+par(mar = c(0,4,2,0))
+plot(sampleTree, main = "Sample clustering to detect outliers -- With Cuts", sub="", xlab="", cex.lab = 1.5,
+cex.axis = 1.5, cex.main = 2)
+abline(h = 50, col = "red");
+#dev.off()
+
+
+clust = cutreeStatic(sampleTree, cutHeight = 50, minSize = 2)
+table(clust)
+
+
+# clust 1 contains the samples we want to keep.
+keepSamples = (clust>=1)
+datExpr = datExpr0[keepSamples, ]
+nGenes = ncol(datExpr)
+nSamples = nrow(datExpr)
+clust
+rownames(datExpr)
+
+sampleTree = hclust(dist(datExpr), method = "average");
+#pdf(file = paste0(plots_dir, "/SampleClustering--Final.pdf"), width = 12, height = 9);
+par(cex = 0.6);
+par(mar = c(0,4,2,0))
+plot(sampleTree, main = "Sample clustering to detect outliers -- Final", sub="", xlab="", cex.lab = 1.5,
+cex.axis = 1.5, cex.main = 2)
+#dev.off()
+
+```
+
+
+## Checking Various Networks
+
+```{r Automatic Network Detection --- Select Soft Powers, eval=FALSE, include=FALSE}
+
+################################## BICOR Hybrid ######################################
+########################### Select this one with a Power of 7 ########################
+library(conflicted)
+conflict_prefer("cor", "WGCNA")
+temp_cor <- cor
+cor <- WGCNA::bicor
+
+# Choose a set of soft-thresholding powers
+powers = c(c(1:34), seq(from = 12, to=34, by=2))
+# Call the network topology analysis function
+sft = pickSoftThreshold(datExpr, powerVector = powers, verbose = 5, corFnc = cor, networkType = "signed hybrid", blockSize = 23000)
+# Plot the results:
+#sizeGrWindow(9, 5)
+par(mfrow = c(1,2));
+cex1 = 0.9;
+# Scale-free topology fit index as a function of the soft-thresholding power
+#pdf(file = paste0(plots_dir, "/AutoDetect-SoftPowerSelection--bicor--hybrid--NOCTX.pdf"), width = 12, height = 9);
+plot(sft$fitIndices[,1], -sign(sft$fitIndices[,3])*sft$fitIndices[,2],
+xlab="Soft Threshold (power)",ylab="Scale Free Topology Model Fit,signed R^2",type="n",
+main = paste("Scale independence"));
+text(sft$fitIndices[,1], -sign(sft$fitIndices[,3])*sft$fitIndices[,2],
+labels=powers,cex=cex1,col="red");
+abline(h=0.90,col="red")
+# Mean connectivity as a function of the soft-thresholding power
+plot(sft$fitIndices[,1], sft$fitIndices[,5],
+xlab="Soft Threshold (power)",ylab="Mean Connectivity", type="n",
+main = paste("Mean connectivity"))
+text(sft$fitIndices[,1], sft$fitIndices[,5], labels=powers, cex=cex1,col="red")
+#dev.off()
+
+########################## BICOR Unsigned ###########################
+# Call the network topology analysis function
+sft = pickSoftThreshold(datExpr, powerVector = powers, verbose = 5, corFnc = cor, networkType = "unsigned", blockSize = 23000)
+# Plot the results:
+#sizeGrWindow(9, 5)
+par(mfrow = c(1,2));
+cex1 = 0.9;
+# Scale-free topology fit index as a function of the soft-thresholding power
+#pdf(file = paste0(plots_dir, "/AutoDetect-SoftPowerSelection--bicor--unsigned.pdf"), width = 12, height = 9);
+plot(sft$fitIndices[,1], -sign(sft$fitIndices[,3])*sft$fitIndices[,2],
+xlab="Soft Threshold (power)",ylab="Scale Free Topology Model Fit,signed R^2",type="n",
+main = paste("Scale independence"));
+text(sft$fitIndices[,1], -sign(sft$fitIndices[,3])*sft$fitIndices[,2],
+labels=powers,cex=cex1,col="red");
+abline(h=0.90,col="red")
+
+# Mean connectivity as a function of the soft-thresholding power
+plot(sft$fitIndices[,1], sft$fitIndices[,5],
+xlab="Soft Threshold (power)",ylab="Mean Connectivity", type="n",
+main = paste("Mean connectivity"))
+text(sft$fitIndices[,1], sft$fitIndices[,5], labels=powers, cex=cex1,col="red")
+#dev.off()
+
+########################## BICOR Signed ###########################
+# Call the network topology analysis function
+sft = pickSoftThreshold(datExpr, powerVector = powers, verbose = 5, corFnc = cor, networkType = "signed", blockSize = 23000)
+# Plot the results:
+#sizeGrWindow(9, 5)
+par(mfrow = c(1,2));
+cex1 = 0.9;
+# Scale-free topology fit index as a function of the soft-thresholding power
+#pdf(file = paste0(plots_dir, "/AutoDetect-SoftPowerSelection--bicor--signed.pdf"), width = 12, height = 9);
+plot(sft$fitIndices[,1], -sign(sft$fitIndices[,3])*sft$fitIndices[,2],
+xlab="Soft Threshold (power)",ylab="Scale Free Topology Model Fit,signed R^2",type="n",
+main = paste("Scale independence"));
+text(sft$fitIndices[,1], -sign(sft$fitIndices[,3])*sft$fitIndices[,2],
+labels=powers,cex=cex1,col="red");
+abline(h=0.90,col="red")
+
+# Mean connectivity as a function of the soft-thresholding power
+plot(sft$fitIndices[,1], sft$fitIndices[,5],
+xlab="Soft Threshold (power)",ylab="Mean Connectivity", type="n",
+main = paste("Mean connectivity"))
+text(sft$fitIndices[,1], sft$fitIndices[,5], labels=powers, cex=cex1,col="red")
+#dev.off()
+
+
+########################## COR Hybrid ###########################
+cor <- WGCNA::cor
+# Choose a set of soft-thresholding powers
+powers = c(c(1:34), seq(from = 12, to=34, by=2))
+# Call the network topology analysis function
+sft = pickSoftThreshold(datExpr, powerVector = powers, verbose = 5, corFnc = cor, networkType = "signed hybrid", blockSize = 23000)
+# Plot the results:
+#sizeGrWindow(9, 5)
+par(mfrow = c(1,2));
+cex1 = 0.9;
+# Scale-free topology fit index as a function of the soft-thresholding power
+#pdf(file = paste0(plots_dir, "/AutoDetect-SoftPowerSelection--cor--hybrid.pdf"), width = 12, height = 9);
+plot(sft$fitIndices[,1], -sign(sft$fitIndices[,3])*sft$fitIndices[,2],
+xlab="Soft Threshold (power)",ylab="Scale Free Topology Model Fit,signed R^2",type="n",
+main = paste("Scale independence"));
+text(sft$fitIndices[,1], -sign(sft$fitIndices[,3])*sft$fitIndices[,2],
+labels=powers,cex=cex1,col="red");
+abline(h=0.90,col="red")
+
+# Mean connectivity as a function of the soft-thresholding power
+plot(sft$fitIndices[,1], sft$fitIndices[,5],
+xlab="Soft Threshold (power)",ylab="Mean Connectivity", type="n",
+main = paste("Mean connectivity"))
+text(sft$fitIndices[,1], sft$fitIndices[,5], labels=powers, cex=cex1,col="red")
+#dev.off()
+
+########################## COR Unsigned ###########################
+# Call the network topology analysis function
+sft = pickSoftThreshold(datExpr, powerVector = powers, verbose = 5, corFnc = cor, networkType = "unsigned", blockSize = 23000)
+# Plot the results:
+#sizeGrWindow(9, 5)
+par(mfrow = c(1,2));
+cex1 = 0.9;
+# Scale-free topology fit index as a function of the soft-thresholding power
+#pdf(file = paste0(plots_dir, "/AutoDetect-SoftPowerSelection--cor--unsigned.pdf"), width = 12, height = 9);
+plot(sft$fitIndices[,1], -sign(sft$fitIndices[,3])*sft$fitIndices[,2],
+xlab="Soft Threshold (power)",ylab="Scale Free Topology Model Fit,signed R^2",type="n",
+main = paste("Scale independence"));
+text(sft$fitIndices[,1], -sign(sft$fitIndices[,3])*sft$fitIndices[,2],
+labels=powers,cex=cex1,col="red");
+abline(h=0.90,col="red")
+
+# Mean connectivity as a function of the soft-thresholding power
+plot(sft$fitIndices[,1], sft$fitIndices[,5],
+xlab="Soft Threshold (power)",ylab="Mean Connectivity", type="n",
+main = paste("Mean connectivity"))
+text(sft$fitIndices[,1], sft$fitIndices[,5], labels=powers, cex=cex1,col="red")
+#dev.off()
+
+########################## COR Signed ###########################
+# Call the network topology analysis function
+sft = pickSoftThreshold(datExpr, powerVector = powers, verbose = 5, corFnc = cor, networkType = "signed", blockSize = 23000)
+# Plot the results:
+#sizeGrWindow(9, 5)
+par(mfrow = c(1,2));
+cex1 = 0.9;
+# Scale-free topology fit index as a function of the soft-thresholding power
+#pdf(file = paste0(plots_dir, "/AutoDetect-SoftPowerSelection--cor--signed.pdf"), width = 12, height = 9);
+plot(sft$fitIndices[,1], -sign(sft$fitIndices[,3])*sft$fitIndices[,2],
+xlab="Soft Threshold (power)",ylab="Scale Free Topology Model Fit,signed R^2",type="n",
+main = paste("Scale independence"));
+text(sft$fitIndices[,1], -sign(sft$fitIndices[,3])*sft$fitIndices[,2],
+labels=powers,cex=cex1,col="red");
+abline(h=0.90,col="red")
+
+# Mean connectivity as a function of the soft-thresholding power
+plot(sft$fitIndices[,1], sft$fitIndices[,5],
+xlab="Soft Threshold (power)",ylab="Mean Connectivity", type="n",
+main = paste("Mean connectivity"))
+text(sft$fitIndices[,1], sft$fitIndices[,5], labels=powers, cex=cex1,col="red")
+#dev.off()
+
+
+```
+
+## Final Network Selection
+
+```{r echo=TRUE, fig.height=8, fig.width=8, message=FALSE, warning=FALSE}
+cor <- WGCNA::bicor
+
+# Choose a set of soft-thresholding powers
+powers = c(c(1:10), seq(from = 12, to=20, by=2))
+# Call the network topology analysis function
+sft = pickSoftThreshold(datExpr, powerVector = powers, verbose = 5, corFnc = cor, networkType = "signed hybrid", blockSize = 23000)
+# Plot the results:
+#pdf(file = paste0(plots_dir, "/SoftPowerSelection--FinalSelection.pdf"), width = 12, height = 9);
+par(mfrow = c(1,2));
+cex1 = 0.9;
+# Scale-free topology fit index as a function of the soft-thresholding power
+plot(sft$fitIndices[,1], -sign(sft$fitIndices[,3])*sft$fitIndices[,2],
+xlab="Soft Threshold (power)",ylab="Scale Free Topology Model Fit,signed R^2",type="n",
+main = paste("Scale independence"));
+text(sft$fitIndices[,1], -sign(sft$fitIndices[,3])*sft$fitIndices[,2],
+labels=powers,cex=cex1,col="red");
+abline(h=0.90,col="red")
+
+# Mean connectivity as a function of the soft-thresholding power
+plot(sft$fitIndices[,1], sft$fitIndices[,5],
+xlab="Soft Threshold (power)",ylab="Mean Connectivity", type="n",
+main = paste("Mean connectivity"))
+text(sft$fitIndices[,1], sft$fitIndices[,5], labels=powers, cex=cex1,col="red")
+#dev.off()
+
+```
+
+## TOM and Adjacency
+
+```{r eval=FALSE, include=FALSE}
+gc()
+softPower = 7;
+adjacency = adjacency(datExpr, power = softPower, corOptions = list(use = 'p'), corFnc = cor, type = "signed hybrid");
+gc()
+# Turn adjacency into topological overlap
+TOM = TOMsimilarity(adjacency, TOMType = "signed");
+dissTOM = 1-TOM
+gc()
+```
+
+
+## Gene Tree and Calculating Overlaps
+
+```{r eval=FALSE, include=FALSE}
+# Call the hierarchical clustering function
+geneTree = hclust(as.dist(dissTOM), method = "average");
+# Plot the resulting clustering tree (dendrogram)
+#pdf(file = paste0(plots_dir, "GeneClusteringTOMS--Final.pdf"), width = 12, height = 9);
+plot(geneTree, xlab="", sub="", main = "Gene clustering on TOM-based dissimilarity",
+labels = FALSE, hang = 0.04);
+#dev.off()
+# We like large modules, so we set the minimum module size relatively high:
+minModuleSize = 40;
+# Module identification using dynamic tree cut:
+dynamicMods = cutreeDynamic(dendro = geneTree, distM = dissTOM,
+deepSplit = 3, pamRespectsDendro = TRUE,
+minClusterSize = minModuleSize);
+table(dynamicMods)
+
+# Convert numeric lables into colors
+dynamicColors = labels2colors(dynamicMods)
+table(dynamicColors)
+# Plot the dendrogram and colors underneath
+#pdf(file = paste0(plots_dir, "/DendroColors-Final.pdf"), wi = 9, he = 6)
+sizeGrWindow(8,6)
+plotDendroAndColors(geneTree, dynamicColors, "Dynamic Tree Cut",
+dendroLabels = FALSE, hang = 0.03,
+addGuide = TRUE, guideHang = 0.05,
+main = "Gene dendrogram and module colors")
+#dev.off()
+# Calculate eigengenes
+MEList = moduleEigengenes(datExpr, colors = dynamicColors, softPower = softPower)
+MEs = MEList$eigengenes
+# Calculate dissimilarity of module eigengenes
+MEDiss = 1-cor(MEs);
+# Cluster module eigengenes
+METree = hclust(as.dist(MEDiss), method = "average");
+# Plot the result
+#pdf(file = paste0(plots_dir, "/METree-Final.pdf"), width = 12, height = 9);
+plot(METree, main = "Clustering of module eigengenes",
+xlab = "", sub = "")
+MEDissThres = 0.25
+# Plot the cut line into the dendrogram
+abline(h=MEDissThres, col = "red")
+#dev.off()
+# Call an automatic merging function
+merge = mergeCloseModules(datExpr, dynamicColors, cutHeight = MEDissThres, verbose = 3)
+# The merged module colors
+mergedColors = merge$colors;
+# Eigengenes of the new merged modules:
+mergedMEs = merge$newMEs;
+
+#pdf(file = paste0(plots_dir, "/geneDendro-Final.pdf"), wi = 9, he = 6)
+plotDendroAndColors(geneTree, cbind(dynamicColors, mergedColors),
+c("Dynamic Tree Cut", "Merged dynamic"),
+dendroLabels = FALSE, hang = 0.03,
+addGuide = TRUE, guideHang = 0.05)
+#dev.off()
+
+# Rename to moduleColors
+moduleColors = mergedColors
+# Construct numerical labels corresponding to the colors
+colorOrder = c("grey", standardColors(50));
+moduleLabels = match(moduleColors, colorOrder)-1;
+MEs = mergedMEs;
+
+###### QC Checks
+
+moduleSizes <- table(moduleColors)
+barplot(sort(moduleSizes, decreasing = TRUE), las=2, main="Module size distribution")
+
+plotEigengeneNetworks(MEs, "", marDendro = c(3,3,2,4), marHeatmap = c(3,4,2,2))
+
+```
+
+## Identifying Statistcally Significantly Expressed Modules
+
+```{r eval=FALSE, include=FALSE}
+## Check Module Expression
+module_colors_df <- MEs %>%
+  tibble::rownames_to_column("accession_code") %>%
+  dplyr::inner_join(metadata %>%
+    dplyr::select(refinebio_accession_code, time_point),
+  by = c("accession_code" = "refinebio_accession_code")
+  )
+
+## Write Results to a saved file
+#write.table(module_colors_df , paste0(results_dir, "/WGCNA_Module_Expression-Final.txt"))
+
+## Ensure that the samples martch the same ones used in the actual calculations
+all.equal(metadata$refinebio_accession_code, rownames(MEs))
+
+## Create the model
+des_mat <- model.matrix(~-1 + metadata$time_point)
+# Fit the model to the dataframes
+fit <- limma::lmFit(t(MEs), design = des_mat)
+## Run Bayes model to check for module significance
+fit <- limma::eBayes(fit)
+## Check for module epression significance
+stats_df <- limma::topTable(fit, number = ncol(MEs)) %>%
+  tibble::rownames_to_column("module")
+# Check Results
+head(stats_df)
+
+
+# Sorting 'stats_df' by 'adj.P.Val'
+stats_df_sorted <- stats_df[order(stats_df$adj.P.Val), ]
+# Filtering rows where 'adj.P.Val' is less than or equal to 0.01
+filtered_stats_df <- subset(stats_df_sorted, adj.P.Val <= 0.01)
+# Extracting the 'modules' 
+modules <- filtered_stats_df$module
+modules_significant <- substring(modules, 3)
+
+
+#write.table(stats_df, paste0(results_dir, "/WCGNA_limma_stats_modules-Final.txt"))
+```
+
+## Plotting Module Expression
+
+```{r}
+
+module_colors_df$time_point <- factor(
+  module_colors_df$time_point,
+  levels = c("CTX","HPP","PFC",
+             "STR","VTA")  # Replace with your desired order
+)
+
+#pdf(file = paste0(plots_dir, "/Rplots_SignificantModules_WGCNA-Final.pdf"))
+for (module in modules) {
+
+  p <- ggplot(
+  module_colors_df,
+  aes(
+    x = time_point,
+    y = .data[[module]],
+    color = time_point
+  )
+) +
+    geom_boxplot(width = 0.5, outlier.shape = NA) +
+    ggforce::geom_sina(maxwidth = 0.3) +
+    geom_text(
+    aes(label = accession_code),
+    position = position_jitter(width = 0.2),  # slight jitter to avoid overlap
+    size = 3,  # adjust size as needed
+    vjust = -0.5,
+    show.legend = FALSE
+  ) +
+    theme_classic() +
+    ggtitle(paste("Expression of Module:", module))
+  
+  print(p)
+}
+#dev.off()
+
+```
+
+## Calculate Module Meber and Extract Highly Modular Genes
+
+```{r Module Membership, eval=FALSE, include=FALSE}
+
+# Step 1: Correlate gene expression with module eigengenes
+modNames <- substring(names(MEs), 3)
+cor <- WGCNA::cor
+
+geneModuleMembership <- as.data.frame(cor(datExpr, MEs, use = "p"))
+MMPvalue <- as.data.frame(corPvalueStudent(as.matrix(geneModuleMembership), nSamples))
+
+# Step 2: Extract gene symbols from rownames
+name_df <- data.frame(gene_id = rownames(MMPvalue))
+name_df <- name_df %>%
+  tidyr::separate(gene_id, into = c("ID", "symbol"), sep = "([|])")
+
+name_df_GS <- data.frame(gene_id = rownames(geneModuleMembership))
+name_df_GS <- name_df_GS %>%
+  tidyr::separate(gene_id, into = c("ID", "symbol"), sep = "([|])")
+
+# Extract rownames again after the separate step
+extracted_names <- name_df$ID
+extracted_names2 <- name_df_GS$ID
+
+# Compare extracted names to original rownames
+all(extracted_names == gsub("([|].*)", "", rownames(MMPvalue)))
+all(extracted_names2 == gsub("([|].*)", "", rownames(geneModuleMembership)))
+
+all(extracted_names == MMPvalue$ID)
+all(extracted_names2 == geneModuleMembership$ID)
+
+# Step 3: Add ID column to MMPvalue and remove rownames
+MMPvalue2 = MMPvalue
+MMPvalue2$ID <- name_df$ID
+MMPvalue2 <- MMPvalue2[, c(ncol(MMPvalue2), 1:(ncol(MMPvalue2)-1))]  # Move ID to first column
+rownames(MMPvalue2) <- NULL
+
+geneModuleMembership2 = geneModuleMembership
+geneModuleMembership2$ID <- name_df_GS$ID
+geneModuleMembership2 <- geneModuleMembership2[, c(ncol(geneModuleMembership2), 1:(ncol(geneModuleMembership2)-1))]  # Move ID to first column
+rownames(geneModuleMembership2) <- NULL
+
+modNames <- substring(names(MMPvalue2)[-1], 3)
+
+### Filter on both MM and p-value #######
+selected_gene_list <- list()
+
+for (mod in modNames) {
+  cor_col <- paste0("ME", mod)
+  pval_col <- paste0("ME", mod)
+  
+  # genes with abs(MM) > 0.7 and p-value < 0.05
+  selected <- geneModuleMembership2$ID[
+    geneModuleMembership2[[cor_col]] > 0.8 &
+    MMPvalue2[[pval_col]] < 0.05
+  ]
+  
+  selected_gene_list[[mod]] <- selected
+}
+
+# Convert gene symbols to Entrez IDs for each module
+modulememberGeneSets.Entrez <- lapply(selected_gene_list, function(genes) {
+  clusterProfiler::bitr(genes, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = "org.Mm.eg.db")$ENTREZID
+})
+
+# Loop through each module and assign the corresponding subset to a new variable
+for (mod in modules_significant) {
+  var_name <- paste0("modulememberGeneSets.Entrez.New.", tools::toTitleCase(mod))
+  assign(var_name, modulememberGeneSets.Entrez[[mod]])
+}
+
+modulememberGeneSets.Entrez.New <- list()
+for (mod in modules_significant) {
+  modulememberGeneSets.Entrez.New[[mod]] <- modulememberGeneSets.Entrez[[mod]]
+}
+
+#entrezmoduleassignments <- capture.output(modulememberGeneSets.Entrez.New)
+#genemoduleassignments <- capture.output(selected_gene_list)
+#writeLines(entrezmoduleassignments, con = paste0(results_dir, "/EntrezModuleAssignments_HighlyModularMembers.txt"))
+#writeLines(genemoduleassignments, con = paste0(results_dir, "/GeneModuleAssignments_HighlyModularMembers.txt"))
+```
+
+## Pathway Enrichment Analysis of Highly Modular Genes
+
+```{r Gene Enrichment based on High Membership Genes, eval=FALSE, include=FALSE}
+
+## Take out any genes in Grey Module (not grouped) and then create background for functional analysis
+restGenes = (moduleColors != "grey")  
+datExpr_without_grey <- datExpr[, restGenes]
+background_genenames <- (as.data.frame(colnames(datExpr_without_grey)))
+
+background_genenames$symbols <- background_genenames[,1]
+newrownames_background <- background_genenames %>% tidyr::separate(symbols, c("id", "symbol"),sep ="([|])")
+
+all(newrownames_background$id == newrownames_background$symbol)
+sum(is.na(newrownames_background$symbol))
+sum(duplicated(newrownames_background$symbol))
+
+
+newrownames_background$entrez <- mapIds(x = org.Mm.eg.db,
+                      keys = newrownames_background$symbol,
+                      column = "ENTREZID",
+                      keytype = "SYMBOL",
+                      multiVals = "first")
+
+background_mm10_WGCNA <- subset(newrownames_background, is.na(entrez) == FALSE)
+gene_matrix_background_WGCNA <- unique(sort(background_mm10_WGCNA$entrez))
+
+#write.csv(gene_matrix_background_WGCNA, paste0(results_dir, "/background_genes_WGCNA-Final.csv"))
+
+######################################################################################################################################################################################################
+
+
+# Looking at KEGG Geneset Enrichment
+ck<-compareCluster(geneCluster=modulememberGeneSets.Entrez.New,
+                   fun="enrichKEGG",organism="mmu",pvalueCutoff = 0.05, universe = gene_matrix_background_WGCNA)
+
+# Looking at GO Geneset Enrichment
+cg <-compareCluster(geneCluster=modulememberGeneSets.Entrez.New, fun="enrichGO",
+                      OrgDb = "org.Mm.eg.db", pvalueCutoff = 0.05,ont = "ALL", readable = T, universe = gene_matrix_background_WGCNA)
+
+# Looking at reactome enrichment
+cr <- compareCluster(geneCluster=modulememberGeneSets.Entrez.New,fun="enrichPathway",
+                   organism="mouse",pvalueCutoff = 0.05, readable = T, universe = gene_matrix_background_WGCNA)
+
+## Apply Filtering
+cg_simplified <- clusterProfiler::simplify(cg, cutoff=0.8, by="p.adjust", select_fun=min)
+
+#pdf(file= paste0(plots_dir,"/BRMicCATD-all-module_geneset_enrichments_HihgModMembersOnly--Final.pdf"),width=20,height=5)
+dotplot(ck,showCategory=15)+ggtitle("KEGG geneset enrichment by module")+theme_bw()+ coord_flip()+theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 8, color = "black"))
+dotplot(cr,showCategory=15)+ggtitle("Reactome geneset enrichment by module")+theme_bw()+ coord_flip()+theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 8, color = "black"))
+dotplot(cg,showCategory=10)+ggtitle("GO geneset enrichment by module")+theme_bw()+ coord_flip()+theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 8, color = "black"))
+dotplot(cg_simplified, showCategory = 15, font.size = 12)+ggtitle("GO geneset Simplified enrichment by module")
+#dev.off()
+
+#write.table(cg, paste0(results_dir, "/compare_Cluster_enrichGO_ALLONT_MEMEBRSONLY_WGCNA.txt"))
+#write.table(ck, paste0(results_dir, "/compare_Cluster_enrichKEGG_MEMEBRSONLY_WGCNA.txt"))
+#write.table(cr, paste0(results_dir, "/compare_Cluster_enrichReactome_MEMEBRSONLY_WGCNA.txt"))
+#write.table(cg_simplified, paste0(results_dir, "/compare_Cluster_enrichGO_Simplified_ALLONT_MEMEBRSONLY_WGCNA.txt"))
+
+cg.final <-as.data.frame(cg)
+ck.final <- as.data.frame(ck)
+cg.simplified.final <- as.data.frame(cg_simplified)
+
+# Filter rows where ONTOLOGY column contains "CC" or "BP"
+filtered_cg_final <- subset(cg.final, ONTOLOGY == "BP" | ONTOLOGY == "CC")
+filtered_cg_simplified_final <- subset(cg.simplified.final, ONTOLOGY == "BP" | ONTOLOGY == "CC")
+
+library(dplyr)
+
+top5_per_cluster <- filtered_cg_final %>%
+  group_by(Cluster) %>%
+  arrange(p.adjust, .by_group = TRUE) %>%
+  slice_head(n = 5) %>%
+  ungroup()
+
+top5_per_cluster_simplified <- filtered_cg_simplified_final %>%
+  group_by(Cluster) %>%
+  arrange(p.adjust, .by_group = TRUE) %>%
+  slice_head(n = 5) %>%
+  ungroup()
+
+
+top5_per_cluster <- top5_per_cluster %>%
+  mutate(Description = factor(Description, levels = rev(unique(Description[order(Cluster, p.adjust)]))))
+
+top5_per_cluster_simplified <- top5_per_cluster_simplified %>%
+  mutate(Description = factor(Description, levels = rev(unique(Description[order(Cluster, p.adjust)]))))
+
+S1 <- ggplot(
+  top5_per_cluster,
+  aes(x = Cluster, y = Description, size = Count, color = qvalue)
+) +
+  geom_point(alpha = 0.8) +
+  theme_bw() +
+  coord_flip() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 10, color = "black"),
+    axis.text.y = element_text(size = 8)
+  ) +
+  scale_color_gradient(low = "red2", high = "mediumblue", space = "Lab") +
+  scale_size(range = c(2, 8))
+
+S1
+
+S1 <- ggplot(top5_per_cluster, aes(x= Cluster, y=Description, size=Count, color=qvalue, group=Cluster)) + geom_point(alpha = 0.8) + 
+  theme_bw()+ 
+  coord_flip()+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 10, color = "black"))
+  
+S1 = S1+scale_color_gradient(low = "red2",  high = "mediumblue", space = "Lab") 
+S1+scale_size(range = c(2, 8))
+S1
+
+S2 <- ggplot(
+  top5_per_cluster_simplified,
+  aes(x = Cluster, y = Description, size = Count, color = qvalue)
+) +
+  geom_point(alpha = 0.8) +
+  theme_bw() +
+  coord_flip() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 10, color = "black"),
+    axis.text.y = element_text(size = 8)
+  ) +
+  scale_color_gradient(low = "red2", high = "mediumblue", space = "Lab") +
+  scale_size(range = c(2, 8))
+
+S2
+
+S2 <- ggplot(top5_per_cluster_simplified, aes(x= Cluster, y=Description, size=Count, color=qvalue, group=Cluster)) + geom_point(alpha = 0.8) + 
+  theme_bw()+ 
+  coord_flip()+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 10, color = "black"))
+  
+
+#pdf(file.path(paste0(plots_dir, "/BRMicCATD-all-module_geneset_enrichments_MEMEBERONLY-SimpandNormal-Final.pdf")),width=15,height=10)
+S1 = S1+scale_color_gradient(low = "red2",  high = "mediumblue", space = "Lab") 
+S1+scale_size(range = c(2, 8))
+#S1
+
+S2 = S2+scale_color_gradient(low = "red2",  high = "mediumblue", space = "Lab") 
+S2+scale_size(range = c(2, 8))
+#S2
+#dev.off()
+```
+
+## Making Module Networks
+
+```{r fig.height=15, fig.width=15}
+
+library(dplyr)
+library(tidyr)
+library(igraph)
+
+############# New Method (https://github.com/pgugger/TranscriptomeAnalysis/blob/master/Exercise3.md)  (Better Site: https://www.biostars.org/p/285296/)
+
+gene.names = names(datExpr)
+modGenes <- list()
+
+for (mod in  modules_significant) {
+  modGenes[[mod]] <- gene.names[moduleColors == mod]
+}
+
+modTOM_list <- list()
+
+for (mod in modules_significant) {
+  inModule <- moduleColors == mod
+  modGenes <- gene.names[inModule]
+  modTOM <- TOM[inModule, inModule]
+  dimnames(modTOM) <- list(modGenes, modGenes)
+  
+  modTOM_list[[mod]] <- modTOM
+  
+  cat("\n---", mod, "---\n")
+  print(dim(modTOM))
+  print(head(modTOM[1:5, 1:5]))
+}
+
+nTop <- 15
+genes <- names(datExpr)
+
+IMConn_list <- list()
+top_TOM_list <- list()
+
+for (mod in modules_significant) {
+  mod_genes <- genes[moduleColors == mod]
+  
+  # Compute intramodular connectivity
+  IMConn <- softConnectivity(datExpr[, mod_genes])
+  IMConn_list[[mod]] <- IMConn
+  
+  # Identify top genes
+  top_genes <- rank(-IMConn) <= nTop
+  
+  # Subset modTOM matrix (assumes modTOM_list[[mod]] exists)
+  top_TOM <- modTOM_list[[mod]][top_genes, top_genes]
+  top_TOM_list[[mod]] <- top_TOM
+  
+  # Optional: show preview
+  cat("\n--- Top TOM for", mod, "---\n")
+  print(top_TOM[1:min(5, nrow(top_TOM)), 1:min(5, ncol(top_TOM))])
+}
+
+genes_top_list <- list()
+datExpr_top_list <- list()
+graph_list <- list()
+vertex_name_tables <- list()
+
+for (mod in modules_significant) {
+  # Step 1: Get top genes
+  modTOM <- modTOM_list[[mod]]
+  IMConn <- IMConn_list[[mod]]
+  top_genes <- rank(-IMConn) <= nTop
+  gene_names <- rownames(modTOM)[top_genes]
+  datExpr_top <- datExpr[, gene_names]
+  
+  # Step 2: Build graph from correlation matrix
+  cor_mat <- cor(datExpr_top, method = "pearson")
+  graph <- graph.adjacency(as.matrix(as.dist(cor_mat)),
+                            weighted = TRUE, mode = "undirected", diag = FALSE)
+  
+  graph <- delete_edges(graph, E(graph)[ weight < 0 ])
+  
+  # Step 3: Simplify graph
+  graph <- igraph::simplify(graph, remove.multiple = TRUE, remove.loops = TRUE)
+  
+  # Step 4: Color edges by sign of correlation
+  E(graph)$color <- ifelse(E(graph)$weight < 0.90, "black", "darkred")
+  
+  # Step 5: Convert edge weights to absolute values
+  E(graph)$weight <- abs(E(graph)$weight)
+  
+  # Step 6: Remove weak edges (< 0.95)
+  graph <- delete_edges(graph, E(graph)[weight < 0.80])
+  
+  # Step 7: Remove orphan vertices
+  graph <- delete_vertices(graph, igraph::degree(graph) == 0)
+  
+  # Step 8: Extract and assign vertex names
+  v_names <- V(graph)$name
+  vertex_df <- data.frame(name = v_names, new.names = v_names)
+  
+  # Save everything
+  graph_list[[mod]] <- graph
+  genes_top_list[[mod]] <- gene_names
+  datExpr_top_list[[mod]] <- datExpr_top
+  vertex_name_tables[[mod]] <- vertex_df
+  
+  cat("\nFinished processing module:", mod, "\n")
+}
+
+
+for (mod in modules_significant) {
+  # Access name table and graph from lists
+  name_df <- vertex_name_tables[[mod]]
+  graph_obj <- graph_list[[mod]]
+  
+  # Separate 'new.names' column into gene_id and symbol using | as separator
+  separated <- name_df %>%
+    separate(new.names, into = c("gene_id", "symbol"), sep = "\\|")
+  
+  # Print checks
+  cat("Module:", mod, "\n")
+  cat("All gene_id == symbol:", all(separated$gene_id == separated$symbol), "\n")
+  cat("NA in symbol:", sum(is.na(separated$symbol)), "\n")
+  cat("Duplicated symbols:", sum(duplicated(separated$symbol)), "\n")
+  cat("All gene_id == symbol again:", all(separated$gene_id == separated$symbol), "\n")
+  
+  # Add genes column from graph vertex names
+  separated$genes <- V(graph_obj)$name
+  
+  # Check if first column matches genes
+  cat("Check separated[1] == genes:", all(separated[[1]] == separated$genes), "\n\n")
+  
+  # Assign gene_id back to graph vertex names
+  V(graph_obj)$name <- separated$gene_id
+  
+  # Update vertex visual properties
+  V(graph_obj)$shape <- "sphere"
+  V(graph_obj)$color <- "skyblue"
+  V(graph_obj)$vertex.frame.color <- "white"
+  
+  # Save back into lists
+  vertex_name_tables[[mod]] <- separated
+  graph_list[[mod]] <- graph_obj
+
+}
+
+library(igraph)
+
+scale01 <- function(x) {
+  (x - min(x)) / (max(x) - min(x))
+}
+
+# Lists to store results
+vSizes_list <- list()
+edgeweights_list <- list()
+mst_edgeweights_list <- list()
+mst_list <- list()
+
+for (mod in modules_significant) {
+  graph_obj <- graph_list[[mod]]
+  expr_mat <- datExpr_top_list[[mod]]  # gene expression matrix for top genes
+  
+  # Calculate vertex sizes proportional to mean expression (scaled and multiplied by 10)
+  mean_expr <- apply(expr_mat, 2, mean)
+  vSizes <- (scale01(mean_expr) + 1.0) * 10
+  vSizes_list[[mod]] <- vSizes
+  
+  # Scale edge weights by factor of 2
+  edgeweights <- E(graph_obj)$weight * 2.0
+  edgeweights_list[[mod]] <- edgeweights
+  
+  # Assign scaled edge weights back to graph
+  E(graph_obj)$weight <- edgeweights
+  
+  # Compute minimum spanning tree using Prim's algorithm
+  mst_graph <- mst(graph_obj, algorithm = "prim")
+  mst_list[[mod]] <- mst_graph
+  
+  mst_edgeweights <- E(mst_graph)$weight * 2.0
+  mst_edgeweights_list[[mod]] <- mst_edgeweights
+  
+  # Update graph_list with weighted edges if needed
+  graph_list[[mod]] <- graph_obj 
+  
+  cat("Processed vertex sizes, edge weights, and MST for module:", mod, "\n")
+}
+
+#pdf(file.path(paste0(plots_dir,"/WGCNA_Netwworks_BRMIC_NOCTX--Final.pdf")), width = 15, height = 15)
+
+for (mod in modules_significant) {
+  mst_graph <- mst_list[[mod]]
+  vSizes_full <- vSizes_list[[mod]]
+  names_df<- NULL
+  
+    # Access name table and graph from lists
+  name_df <- as.data.frame(names(vSizes_full))
+  
+  # Separate 'new.names' column into gene_id and symbol using | as separator
+  separated <- name_df %>%
+    separate("names(vSizes_full)", into = c("gene_id", "symbol"), sep = "\\|")
+  
+  # Print checks
+  cat("Module:", mod, "\n")
+  cat("All gene_id == symbol:", all(separated$gene_id == separated$symbol), "\n")
+  cat("NA in symbol:", sum(is.na(separated$symbol)), "\n")
+  cat("Duplicated symbols:", sum(duplicated(separated$symbol)), "\n")
+  cat("All gene_id == symbol again:", all(separated$gene_id == separated$symbol), "\n")
+  
+    # Assign gene_id back to graph vertex names
+  names(vSizes_full) <- separated$gene_id
+  
+  vSizes_mst <- vSizes_full[ V(mst_graph)$name ]
+
+  stopifnot(length(vSizes_mst) == vcount(mst_graph))
+  edgeweights <- edgeweights_list[[mod]]
+  edgeweights_mst <- mst_edgeweights_list[[mod]]
+  
+  # Community detection
+  mst_communities <- cluster_fast_greedy(mst_graph)
+  mst_clustering <- make_clusters(mst_graph, membership = mst_communities$membership)
+  
+  # Assign colors to vertices based on communities
+  V(mst_graph)$color <- mst_communities$membership + 1
+  
+  
+  # Plot with clustering layout and vertex/edge sizes
+  plot(
+    mst_clustering, mst_graph,
+    layout = layout.kamada.kawai,
+    edge.curved = TRUE,
+    vertex.size = vSizes_mst,
+    vertex.label.dist = -0.1,
+    vertex.label.color = "black",
+    asp = FALSE,
+    vertex.label.cex = 1,
+    edge.width = edgeweights_mst,
+    edge.arrow.mode = 0,
+    main = paste0(toupper(substr(mod,1,1)), substr(mod,2,nchar(mod)), " Network #1")
+  )
+  
+  # Plot plain MST graph without clustering
+  plot(
+    mst_graph,
+    layout = layout.kamada.kawai,
+    edge.curved = TRUE,
+    vertex.size = vSizes_mst,
+    vertex.label.dist = -0.1,
+    vertex.label.color = "black",
+    asp = FALSE,
+    vertex.label.cex = 1,
+    edge.width = edgeweights_mst,
+    edge.arrow.mode = 0,
+    main = paste0(toupper(substr(mod,1,1)), substr(mod,2,nchar(mod)), " Network #2")
+  )
+}
+
+
+
+#dev.off()
+
+```
+
+# Session Info
+
+```{r Print Session Info, echo=TRUE, message=TRUE, warning=FALSE}
+sessionInfo()
+```
+

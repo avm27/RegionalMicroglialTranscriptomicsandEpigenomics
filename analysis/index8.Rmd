@@ -1,0 +1,445 @@
+---
+title: "IGV Style Plots"
+site: workflowr::wflow_site
+output:
+  workflowr::wflow_html:
+    toc: false
+editor_options:
+  chunk_output_type: console
+---
+
+# Using RtrackLayer to Generate IGV Style Plots for overlays of RNA Seq and CATD DataSets
+
+First we merged bigWig files by biological replicate. As starting material we need the merged BAM files output following SAM conversion and replicate combination from alignment from both the RNA Sequencing and CUT&Tag Data. The script used below details how we obtained such files for visualization.
+
+```{bash, eval=TRUE, engine="sh"}
+#!/bin/bash
+
+echo "Don't Run Me"
+
+projPath="DataProcessing"
+bamdir="BAMs"
+bigwigdir="bigwig_withnorm"
+bamCoverage="/home/avm27/anaconda3/envs/cutruntools2.1/bin/bamCoverage"
+mm10blacklist="mm10-blacklist.v2.bed"
+binsize=10
+threads=12
+effectiveGS=2652783500
+
+echo "################################################################################
+#####										######
+##### 				Converting to BigWigs				######
+#####			Using the Following Parameters: 			######
+#####			Threads = $threads, BinSize = $binsize, 		######
+#####			NormalizeUsing = RPCG,					######
+#####			Effective genome size = 2652783500			######
+#####										######
+#######################################################################################"
+
+echo 
+echo ""
+
+for histName in $(find ~/fastq -type f -name "*.fastq.gz" | while read F; do basename $F | rev | cut -c 28- | rev; done | sort | uniq)
+do
+
+	echo "Beginning BigWig Conversion For ${histName}"
+
+   $bamCoverage --bam $bamdir/${histName}_merged_dupMarked_subsample.sorted.bam -o $bigwigdir/${histName}merged_dupMarked_subsample_raw_norm.bw --verbose --numberOfProcessors $threads --binSize $binsize --blackListFileName $mm10blacklist --normalizeUsing RPGC --effectiveGenomeSize $effectiveGS --ignoreForNormalization chrX --extendReads
+	
+	echo "Completed BigWig Conversion For ${histName}"
+	
+done
+
+$bamCoverage --bam $bamdir/ALL_IgG_merged_dupMarked_subsample.sorted.bam -o $bigwigdir/ALL_IgG_merged_dupMarked_subsample_raw_norm.bw --verbose --numberOfProcessors $threads --binSize $binsize --blackListFileName $mm10blacklist --normalizeUsing RPGC --effectiveGenomeSize $effectiveGS --ignoreForNormalization chrX --extendReads
+
+echo "################################################################################
+#####										######
+##### 		Now beginning to Merge BigWigs for Visualization		######
+#####										######
+#######################################################################################"
+
+projPath="bigwig_withnorm"
+outPath="bigwig_withnorm/merged"
+outPathSort="bigwig_withnorm/merged/sorted"
+outPathFinal="bigwig_withnorm/merged/final_bw"
+chromSizes="/home/avm27/Desktop/CUT-RUNTools-2.0-master/assemblies/chrom.mm10"
+bedgraphToBigWig="/home/avm27/UCSC/bedGraphToBigWig" ### Download UCSC Tools
+bigWigMerge="/home/avm27/UCSC/bigWigMerge"
+
+
+for histName in $(find ~/bigwig_withnorm -type f -name "*H3K27me3_merged_dupMarked_subsample_raw_norm.bw" | while read F; do basename $F | rev | cut -c 50- | rev; done | sort | uniq)
+do 
+
+	echo "Beginning BigWig Merge For ${histName} K27me3"
+	
+	$bigWigMerge $projPath/${histName}8_H3K27me3_merged_dupMarked_subsample_raw_norm.bw $projPath/${histName}9_H3K27me3_merged_dupMarked_subsample_raw_norm.bw $outPath/${histName}_H3K27me3.merged.raw.bedGraph
+	
+	echo "Completed BigWig Merge For ${histName} K27me3"
+	
+	echo "Beginning BigWig Merge For ${histName} K27ac"
+	
+	$bigWigMerge $projPath/${histName}8_H3K27ac_merged_dupMarked_subsample_raw_norm.bw $projPath/${histName}9_H3K27ac_merged_dupMarked_subsample_raw_norm.bw $outPath/${histName}_H3K27ac.merged.raw.bedGraph
+	
+	echo "Completed BigWig Merge For ${histName} K27ac"
+
+done
+
+for histName in $(find ~/bigwig_withnorm -type f -name "*.merged.raw.bedGraph" | while read F; do basename $F | rev | cut -c 21- | rev; done | sort | uniq)
+do 
+
+	sort -k1,1 -k2,2n ${outPath}/${histName}.merged.raw.bedGraph > ${outPathSort}/${histName}.sorted.merged.raw.bedGraph
+
+done
+
+for histName in $(find ~/bigwig_withnorm -type f -name "*.sorted.merged.raw.bedGraph" | while read F; do basename $F | rev | cut -c 28- | rev; done | sort | uniq)
+do 
+
+	$bedgraphToBigWig $outPathSort/${histName}.sorted.merged.raw.bedGraph $chromSizes/mm10.chrom.sizes $outPathFinal/${histName}.final.merged.bw
+
+done
+
+
+echo "################################################################################
+#####										######
+##### 		Now beginning to Make BigWigs for Visualization			######
+#####			RNA-Sequencing Data					######
+#######################################################################################"
+
+projPath="FASTQ"
+outPath="FASTQ/bigwig_new/merged"
+outPathSort="FASTQ/bigwig_new/merged/sorted"
+outPathFinal="FASTQ/bigwig_new/final_bw"
+chromSizes="/home/avm27/Desktop/CUT-RUNTools-2.0-master/assemblies/chrom.mm10"
+bedgraphToBigWig="/home/avm27/UCSC/bedGraphToBigWig"
+bamCoverage="/home/avm27/anaconda3/envs/cutruntools2.1/bin/bamCoverage"
+bigWigMerge="/home/avm27/UCSC/bigWigMerge"
+cores=12
+
+echo "
+       Using SizeFactors Calculated by DESEQ2 (Use the inverse i.e. 1/[DESEQ2 Size Factor])
+
+	MCTX8     MCTX9     MHPP8     MHPP9     MPFC8     MPFC9     MSTR8     MSTR9     MVTA8     MVTA9 
+	0.9080702 1.1063354 1.1725299 1.0557908 0.8499803 1.2347647 0.9207111 1.1399865 0.8419090 0.9005661 
+
+"
+
+$bamCoverage --numberOfProcessors $cores -bs 1 --scaleFactor 1.101236446 --skipNonCoveredRegions --verbose -b $projPath/MCTX8.bam -o $projPath/bigwig_new/MCTX8_new.bw
+$bamCoverage --numberOfProcessors $cores -bs 1 --scaleFactor 0.903885024 --skipNonCoveredRegions --verbose -b $projPath/MCTX9.bam -o $projPath/bigwig_new/MCTX9_new.bw
+$bamCoverage --numberOfProcessors $cores -bs 1 --scaleFactor 0.852856716 --skipNonCoveredRegions --verbose -b $projPath/MHPP8.bam -o $projPath/bigwig_new/MHPP8_new.bw
+$bamCoverage --numberOfProcessors $cores -bs 1 --scaleFactor 0.947157335 --skipNonCoveredRegions --verbose -b $projPath/MHPP9.bam -o $projPath/bigwig_new/MHPP9_new.bw
+$bamCoverage --numberOfProcessors $cores -bs 1 --scaleFactor 1.176497855 --skipNonCoveredRegions --verbose -b $projPath/MPFC8.bam -o $projPath/bigwig_new/MPFC8_new.bw
+$bamCoverage --numberOfProcessors $cores -bs 1 --scaleFactor 0.809870901 --skipNonCoveredRegions --verbose -b $projPath/MPFC9.bam -o $projPath/bigwig_new/MPFC9_new.bw
+$bamCoverage --numberOfProcessors $cores -bs 1 --scaleFactor 1.086117024 --skipNonCoveredRegions --verbose -b $projPath/MSTR8.bam -o $projPath/bigwig_new/MSTR8_new.bw
+$bamCoverage --numberOfProcessors $cores -bs 1 --scaleFactor 0.87720337 --skipNonCoveredRegions --verbose -b $projPath/MSTR9.bam -o $projPath/bigwig_new/MSTR9_new.bw
+$bamCoverage --numberOfProcessors $cores -bs 1 --scaleFactor 1.187776826 --skipNonCoveredRegions --verbose -b $projPath/MVTA8.bam -o $projPath/bigwig_new/MVTA8_new.bw
+$bamCoverage --numberOfProcessors $cores -bs 1 --scaleFactor 1.110412662 --skipNonCoveredRegions --verbose -b $projPath/MVTA9.bam -o $projPath/bigwig_new/MVTA9_new.bw
+
+
+
+
+for regionName in $(find ~/FASTQ/bigwig_new -type f -name "*.bw" | while read F; do basename $F | rev | cut -c 9- | rev; done | sort | uniq)
+do 
+
+	$bigWigMerge $projPath/bigwig_new/${regionName}8_new.bw $projPath/bigwig_new/${regionName}9_new.bw $outPath/${regionName}.merged_new.bedGraph
+
+done
+
+
+for regionName in $(find ~/FASTQ/bigwig_new -type f -name "*.bw" | while read F; do basename $F | rev | cut -c 9- | rev; done | sort | uniq)
+do 
+
+	sort -k1,1 -k2,2n $outPath/${regionName}.merged_new.bedGraph > $outPathSort/${regionName}.sorted.merged_new.bedGraph
+
+done
+
+for regionName in $(find ~/FASTQ/bigwig_new -type f -name "*.bw" | while read F; do basename $F | rev | cut -c 9- | rev; done | sort | uniq)
+do
+
+	$bedgraphToBigWig $outPathSort/${regionName}.sorted.merged_new.bedGraph $chromSizes/mm10.chrom.sizes $outPathFinal/${regionName}.merged_new.bw
+
+done
+
+```
+
+
+## Read in the necessary BigWig Files Generated Above
+
+```{r eval=FALSE, include=FALSE}
+
+# Load necessary libraries
+if (!requireNamespace("GenomicRanges", quietly = TRUE)) {
+  install.packages("GenomicRanges")
+}
+library(GenomicRanges)
+if (!requireNamespace("rtracklayer", quietly = TRUE)) {
+  BiocManager::install("rtracklayer")
+}
+library(rtracklayer)
+
+devtools::install_github('yimingsun12138/TrackPlotR', force = TRUE)
+
+library(ggplot2)
+library(rtracklayer)
+library(TrackPlotR)
+library(patchwork)
+
+
+bigWigs_ac = c( "/bigwig_withnorm/merged/final_bw/CTX_H3K27ac.final.merged.bw",
+                "/bigwig_withnorm/merged/final_bw/HPP_H3K27ac.final.merged.bw", 
+                "/bigwig_withnorm/merged/final_bw/PFC_H3K27ac.final.merged.bw",
+                "/bigwig_withnorm/merged/final_bw/STR_H3K27ac.final.merged.bw",
+                "/bigwig_withnorm/merged/final_bw/VTA_H3K27ac.final.merged.bw")
+
+bigWigs_me3 = c("/bigwig_withnorm/merged/final_bw/CTX_H3K27me3.final.merged.bw",
+                "/bigwig_withnorm/merged/final_bw/HPP_H3K27me3.final.merged.bw", 
+                "/bigwig_withnorm/merged/final_bw/PFC_H3K27me3.final.merged.bw",
+                "/bigwig_withnorm/merged/final_bw/STR_H3K27me3.final.merged.bw",
+                "/bigwig_withnorm/merged/final_bw/VTA_H3K27me3.final.merged.bw")
+
+bigWigs_IgG = c("/bigwig_withnorm/merged/final_bw/ALL_IgG.final.merged.bw")
+
+
+coverage_info_RNA <- c("FASTQ/bigwig_new/final_bw/MCTX.merged_new.bw",
+                        "FASTQ/bigwig_new/final_bw/MHPP.merged_new.bw", 
+                        "FASTQ/bigwig_new/final_bw/MPFC.merged_new.bw",
+                        "FASTQ/bigwig_new/final_bw/MSTR.merged_new.bw", 
+                        "FASTQ/bigwig_new/final_bw/MVTA.merged_new.bw")
+
+file.exists(bigWigs_ac)
+file.exists(bigWigs_me3)
+file.exists(bigWigs_IgG)
+file.exists(coverage_info_RNA)
+
+
+bigWigs_ac <- load_BigWig(file_path = bigWigs_ac, file_name = c("CTX_ac", "HPP_ac","PFC_ac","STR_ac","VTA_ac"))
+bigWigs_me3 <- load_BigWig(file_path = bigWigs_me3, file_name = c("CTX_me3", "HPP_me3","PFC_me3","STR_me3","VTA_me3"))
+bigWigs_IgG <- load_BigWig(file_path = bigWigs_IgG, file_name = c("IgG"))
+coverage_info_RNA <- load_BigWig(file_path = coverage_info_RNA,file_name = c("CTX_rna",  "HPP_rna", "PFC_rna", "STR_rna", "VTA_rna"))
+
+gtf_file <- "/home/avm27/Downloads/gencode.vM10.annotation.gff3"
+file.exists(gtf_file)
+mouse_anno <- import(gtf_file, format = "gff")
+
+```
+
+
+## Individual plots
+
+
+```{r eval=FALSE, include=FALSE}
+###########################################
+###                                   #####
+###         Plotting TNFa             #####
+###                                   #####
+###########################################
+
+p1_bigWigs_ac_Tnf <- coverage_vis_gene(coverage_table = bigWigs_ac, gene_anno = mouse_anno, column_name = 'gene_name',gene = 'Tnf',y_lim = 220, up_extend = 2000,down_extend = 250,sample_order = c("CTX_ac","HPP_ac","PFC_ac", "STR_ac", "VTA_ac"),
+                                   col_pal = c("#FF9289","#FF8AFF","#00DB98","#00CBFF","#BEC100"))
+p1_bigWigs_me3_Tnf <- coverage_vis_gene(coverage_table = bigWigs_me3,gene_anno = mouse_anno, column_name = 'gene_name',gene = 'Tnf',y_lim = 220, up_extend = 2000, down_extend = 250,sample_order = c("CTX_me3", "HPP_me3","PFC_me3","STR_me3","VTA_me3"),
+                                    col_pal = c("#FF9289","#FF8AFF","#00DB98","#00CBFF","#BEC100"))
+p1_bigWigs_IgG_Tnf <- coverage_vis_gene(coverage_table = bigWigs_IgG,gene_anno = mouse_anno, column_name = 'gene_name',gene = 'Tnf',y_lim = 220, up_extend = 2000, down_extend = 250,sample_order = c("IgG"),
+                                        col_pal = c("black"))
+p1_coverage_info_RNA_Tnf <- coverage_vis_gene(coverage_table = coverage_info_RNA,gene_anno = mouse_anno, column_name = 'gene_name',gene = 'Tnf',up_extend = 2000,down_extend = 250, y_lim = 15000,sample_order = c("CTX_rna",  "HPP_rna", "PFC_rna", "STR_rna", "VTA_rna"),
+                                      col_pal = c("#FF9289","#FF8AFF","#00DB98","#00CBFF","#BEC100"))
+Tnf <- gene_track_vis(gene_anno = mouse_anno,column_name = 'gene_name',gene = 'Tnf',up_extend = 2000,down_extend = 250,show_only = FALSE)
+p1_Tnf <- p1_bigWigs_ac_Tnf + theme(axis.ticks.x = element_blank(),axis.text.x = element_blank(),axis.title.x = element_blank())
+p2_Tnf <- p1_bigWigs_me3_Tnf + theme(axis.ticks.x = element_blank(),axis.text.x = element_blank(),axis.title.x = element_blank(),legend.position = 'none')
+p3_Tnf <- p1_bigWigs_IgG_Tnf + theme(axis.ticks.x = element_blank(),axis.text.x = element_blank(),axis.title.x = element_blank(),legend.position = 'none')
+p4_Tnf <- p1_coverage_info_RNA_Tnf + theme(axis.ticks.x = element_blank(),axis.text.x = element_blank(),axis.title.x = element_blank())
+
+
+
+TNFPlot <- print(p1_Tnf + p2_Tnf + p3_Tnf + p4_Tnf + Tnf + plot_layout(ncol = 1,heights = c(0.3,0.3,0.05,0.3,0.05)))
+
+#pdf("CATD_IGV/IGVPlots_Tnfa.pdf", width = 8, height = 8)
+TNFPlot
+#dev.off()
+
+
+###########################################
+###                                   #####
+###         Plotting Msx1             #####
+###                                   #####
+###########################################
+
+p1_bigWigs_ac_Msx1 <- coverage_vis_gene(coverage_table = bigWigs_ac, 
+                                          gene_anno = mouse_anno, 
+                                          column_name = 'gene_name',
+                                          gene = 'Msx1',
+                                          y_lim = 50, 
+                                          up_extend = 50,
+                                          down_extend = 50,
+                                          sample_order = c("CTX_ac","HPP_ac","PFC_ac", "STR_ac", "VTA_ac"),
+                                          col_pal = c("#FF9289","#FF8AFF","#00DB98","#00CBFF","#BEC100"))
+
+p1_bigWigs_me3_Msx1 <- coverage_vis_gene(coverage_table = bigWigs_me3,
+                                           gene_anno = mouse_anno, 
+                                           column_name = 'gene_name',
+                                           gene = 'Msx1',
+                                           y_lim = 50, 
+                                           up_extend = 50, 
+                                           down_extend = 50,
+                                           sample_order = c("CTX_me3", "HPP_me3","PFC_me3","STR_me3","VTA_me3"),
+                                           col_pal = c("#FF9289","#FF8AFF","#00DB98","#00CBFF","#BEC100"))
+
+p1_bigWigs_IgG_Msx1 <- coverage_vis_gene(coverage_table = bigWigs_IgG,
+                                           gene_anno = mouse_anno, 
+                                           column_name = 'gene_name',
+                                           gene = 'Msx1',
+                                           y_lim = 50, 
+                                           up_extend = 50, 
+                                           down_extend = 50,
+                                           sample_order = c("IgG"),
+                                           col_pal = c("black"))
+
+p1_coverage_info_RNA_Msx1 <- coverage_vis_gene(coverage_table = coverage_info_RNA,
+                                                 gene_anno = mouse_anno, 
+                                                 column_name = 'gene_name',
+                                                 gene = 'Msx1',
+                                                 up_extend = 50,
+                                                 down_extend = 50, 
+                                                 y_lim = 20000,
+                                                 sample_order = c("CTX_rna",  "HPP_rna", "PFC_rna", "STR_rna", "VTA_rna"),
+                                                 col_pal = c("#FF9289","#FF8AFF","#00DB98","#00CBFF","#BEC100"))
+
+
+Msx1 <- gene_track_vis(gene_anno = mouse_anno,column_name = 'gene_name',gene = 'Msx1',up_extend = 50,down_extend = 50,show_only = FALSE)
+p1_Msx1 <- p1_bigWigs_ac_Msx1 + theme(axis.ticks.x = element_blank(),axis.text.x = element_blank(),axis.title.x = element_blank(),legend.position = 'none')
+p2_Msx1 <- p1_bigWigs_me3_Msx1 + theme(axis.ticks.x = element_blank(),axis.text.x = element_blank(),axis.title.x = element_blank(),legend.position = 'none')
+p3_Msx1 <- p1_bigWigs_IgG_Msx1 + theme(axis.ticks.x = element_blank(),axis.text.x = element_blank(),axis.title.x = element_blank(),legend.position = 'none')
+p4_Msx1 <- p1_coverage_info_RNA_Msx1 + theme(axis.ticks.x = element_blank(),axis.text.x = element_blank(),axis.title.x = element_blank())
+
+Msx1Plot <- print(p1_Msx1 + p2_Msx1 + p3_Msx1 + p4_Msx1 + Msx1 + plot_layout(ncol = 1,heights = c(0.3,0.3,0.05,0.3,0.05)))
+
+
+#pdf("CATD_IGV/IGVPlots_Msx1.pdf", width = 8, height = 8)
+Msx1Plot
+#dev.off()
+
+
+###########################################
+###                                   #####
+###         Plotting Rbfox3           #####
+###                                   #####
+###########################################
+
+p1_bigWigs_ac_Rbfox3 <- coverage_vis_gene(coverage_table = bigWigs_ac, 
+                                           gene_anno = mouse_anno, 
+                                           column_name = 'gene_name',
+                                           gene = 'Rbfox3',
+                                           y_lim = 100, 
+                                           up_extend = 0,
+                                           down_extend = 0,
+                                           sample_order = c("CTX_ac","HPP_ac","PFC_ac", "STR_ac", "VTA_ac"),
+                                           col_pal = c("#FF9289","#FF8AFF","#00DB98","#00CBFF","#BEC100"))
+
+p1_bigWigs_me3_Rbfox3 <- coverage_vis_gene(coverage_table = bigWigs_me3,
+                                            gene_anno = mouse_anno, 
+                                            column_name = 'gene_name',
+                                            gene = 'Rbfox3',
+                                            y_lim = 100, 
+                                            up_extend = 0, 
+                                            down_extend = 0,
+                                            sample_order = c("CTX_me3", "HPP_me3","PFC_me3","STR_me3","VTA_me3"),
+                                            col_pal = c("#FF9289","#FF8AFF","#00DB98","#00CBFF","#BEC100"))
+
+p1_bigWigs_IgG_Rbfox3 <- coverage_vis_gene(coverage_table = bigWigs_IgG,
+                                            gene_anno = mouse_anno, 
+                                            column_name = 'gene_name',
+                                            gene = 'Rbfox3',
+                                            y_lim = 100, 
+                                            up_extend = 0, 
+                                            down_extend = 0,
+                                            sample_order = c("IgG"),
+                                            col_pal = c("black"))
+
+p1_coverage_info_RNA_Rbfox3 <- coverage_vis_gene(coverage_table = coverage_info_RNA,
+                                                  gene_anno = mouse_anno, 
+                                                  column_name = 'gene_name',
+                                                  gene = 'Rbfox3',
+                                                  up_extend = 0,
+                                                  down_extend = 0, 
+                                                  y_lim = 250,
+                                                  sample_order = c("CTX_rna",  "HPP_rna", "PFC_rna", "STR_rna", "VTA_rna"),
+                                                  col_pal = c("#FF9289","#FF8AFF","#00DB98","#00CBFF","#BEC100"))
+
+
+Rbfox3 <- gene_track_vis(gene_anno = mouse_anno,column_name = 'gene_name',gene = 'Rbfox3',up_extend = 0,down_extend = 0,show_only = FALSE)
+p1_Rbfox3 <- p1_bigWigs_ac_Rbfox3 + theme(axis.ticks.x = element_blank(),axis.text.x = element_blank(),axis.title.x = element_blank(),legend.position = 'none')
+p2_Rbfox3 <- p1_bigWigs_me3_Rbfox3 + theme(axis.ticks.x = element_blank(),axis.text.x = element_blank(),axis.title.x = element_blank(),legend.position = 'none')
+p3_Rbfox3 <- p1_bigWigs_IgG_Rbfox3 + theme(axis.ticks.x = element_blank(),axis.text.x = element_blank(),axis.title.x = element_blank(),legend.position = 'none')
+p4_Rbfox3 <- p1_coverage_info_RNA_Rbfox3 + theme(axis.ticks.x = element_blank(),axis.text.x = element_blank(),axis.title.x = element_blank())
+
+Rbfox3Plot <- print(p1_Rbfox3 + p2_Rbfox3 + p3_Rbfox3 + p4_Rbfox3 + Rbfox3 + plot_layout(ncol = 1,heights = c(0.3,0.3,0.05,0.3,0.1)))
+
+#pdf("CATD_IGV/IGVPlots_Rbfox3.pdf", width = 8, height = 8)
+Rbfox3Plot
+#dev.off()
+
+
+###########################################
+###                                   #####
+###         Plotting Il1a           #####
+###                                   #####
+###########################################
+
+p1_bigWigs_ac_Il1a <- coverage_vis_gene(coverage_table = bigWigs_ac, 
+                                          gene_anno = mouse_anno, 
+                                          column_name = 'gene_name',
+                                          gene = 'Il1a',
+                                          y_lim = 400, 
+                                          up_extend = 1000,
+                                          down_extend = 1000,
+                                          sample_order = c("CTX_ac","HPP_ac","PFC_ac", "STR_ac", "VTA_ac"),
+                                          col_pal = c("#FF9289","#FF8AFF","#00DB98","#00CBFF","#BEC100"))
+
+p1_bigWigs_me3_Il1a <- coverage_vis_gene(coverage_table = bigWigs_me3,
+                                           gene_anno = mouse_anno, 
+                                           column_name = 'gene_name',
+                                           gene = 'Il1a',
+                                           y_lim = 400, 
+                                           up_extend = 1000, 
+                                           down_extend = 1000,
+                                           sample_order = c("CTX_me3", "HPP_me3","PFC_me3","STR_me3","VTA_me3"),
+                                           col_pal = c("#FF9289","#FF8AFF","#00DB98","#00CBFF","#BEC100"))
+
+p1_bigWigs_IgG_Il1a <- coverage_vis_gene(coverage_table = bigWigs_IgG,
+                                           gene_anno = mouse_anno, 
+                                           column_name = 'gene_name',
+                                           gene = 'Il1a',
+                                           y_lim = 400, 
+                                           up_extend = 1000, 
+                                           down_extend = 1000,
+                                           sample_order = c("IgG"),
+                                           col_pal = c("black"))
+
+p1_coverage_info_RNA_Il1a <- coverage_vis_gene(coverage_table = coverage_info_RNA,
+                                                 gene_anno = mouse_anno, 
+                                                 column_name = 'gene_name',
+                                                 gene = 'Il1a',
+                                                 up_extend = 1000,
+                                                 down_extend = 1000, 
+                                                 y_lim = 50000,
+                                                 sample_order = c("CTX_rna",  "HPP_rna", "PFC_rna", "STR_rna", "VTA_rna"),
+                                                 col_pal = c("#FF9289","#FF8AFF","#00DB98","#00CBFF","#BEC100"))
+
+
+Il1a <- gene_track_vis(gene_anno = mouse_anno,column_name = 'gene_name',gene = 'Il1a',up_extend = 1000,down_extend = 1000,show_only = FALSE)
+p1_Il1a <- p1_bigWigs_ac_Il1a + theme(axis.ticks.x = element_blank(),axis.text.x = element_blank(),axis.title.x = element_blank(),legend.position = 'none')
+p2_Il1a <- p1_bigWigs_me3_Il1a + theme(axis.ticks.x = element_blank(),axis.text.x = element_blank(),axis.title.x = element_blank(),legend.position = 'none')
+p3_Il1a <- p1_bigWigs_IgG_Il1a + theme(axis.ticks.x = element_blank(),axis.text.x = element_blank(),axis.title.x = element_blank(),legend.position = 'none')
+p4_Il1a <- p1_coverage_info_RNA_Il1a + theme(axis.ticks.x = element_blank(),axis.text.x = element_blank(),axis.title.x = element_blank())
+
+Il1aPlot <- print(p1_Il1a + p2_Il1a + p3_Il1a + p4_Il1a + Il1a + plot_layout(ncol = 1,heights = c(0.3,0.3,0.05,0.3,0.1)))
+
+#pdf("CATD_IGV/IGVPlots_Il1a.pdf", width = 8, height = 8)
+Il1aPlot
+#dev.off()
+
+```
+
+# Session Info
+
+```{r Print Session Info, echo=TRUE, message=TRUE, warning=FALSE}
+sessionInfo()
+```

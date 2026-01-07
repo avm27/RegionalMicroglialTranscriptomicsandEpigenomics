@@ -1,0 +1,872 @@
+---
+output:
+  reprex::reprex_document:
+    venue: "gh"
+    advertise: FALSE
+    session_info: TRUE
+    style: TRUE
+    comment: "#;-)"
+    tidyverse_quiet: FALSE
+    std_out_err: TRUE
+knit: reprex::reprex_render
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(EnsDb.Mmusculus.v75)
+library(ChIPseeker)
+library(ChIPpeakAnno)
+library(ggplot2)
+library(clusterProfiler)
+library(AnnotationDbi)
+library(org.Mm.eg.db)
+library(TxDb.Mmusculus.UCSC.mm10.knownGene)
+library(rtracklayer)
+library(reactome.db)
+library(BSgenome.Mmusculus.UCSC.mm10)
+library(seqinr)
+library(UpSetR)
+library(trackViewer)
+library(ggpubr)
+library(dplyr)
+library(stringr)
+library(viridis)
+library(GenomicRanges)
+library(chromVAR)
+library(DESeq2)
+library(corrplot)
+library(ggupset)
+library(knitr)
+library(kableExtra)
+library(GeneOverlap)
+```
+
+# Data Loading
+## RNA-Sequencing Data Loading
+### Data Tidying
+
+Here we will utilize FPKM values generated from StringTie during the RNA-Sequencing processing pipeline. We utilize these to separate genes based on expression levels. We then map the GeneIDs to ENSMBL Ids using biomart and select for protein-coding genes only.
+
+```{r}
+setwd("~/Documents/Raw_Sequencing_Data/BrainRegionMicroglia/RegionalMicroglialTranscriptomicsandEpigenomics")
+
+dataPath="/data/RNASeq_FPKMs/"
+
+VTA8_FPKM <- read.table(paste0(dataPath, "MVTA8_FPKM.txt"), sep= "\t", header = TRUE)
+data <- VTA8_FPKM[, c("Gene.ID")]
+merged_data <- data.frame(Gene.ID=data)
+
+# Set the working directory to the location of the files
+# Create a list of the filenames to merge
+file_list <- list.files(dataPath ,pattern = "*.txt")
+
+# Create an empty data frame to store the merged data
+
+# Loop through each file in the list
+for (file in file_list) {
+  # Read in the data from the file
+  data <- read.table(paste0(dataPath, file), header = TRUE, sep = "\t")
+  head(data)
+  
+  # Extract only the Gene.ID and FPKM columns
+  data <- data[, c("Gene.ID", "FPKM")]
+  
+  # Get the file name without the extension
+  file_name <- gsub(".txt", "", file)
+  
+  # Rename the FPKM column based on the file name
+  colnames(data)[2] <- file_name
+
+  # Merge the data with the existing merged_data
+  merged_data <- merge(merged_data, data, by = "Gene.ID", all = TRUE)
+}
+
+
+## Rename Columns
+colnames(merged_data) <- c("Gene.ID", "CTX8", "CTX9", "HPP8", "HPP9", "PFC8", "PFC9", "STR8", "STR9", "VTA8", "VTA9")
+
+### Tidy up the data frame removing duplicate gene names and mapping the GENEIDs to ENSMBLE IDs
+#sum(is.na(merged_data$Gene.ID))
+#sum(duplicated(merged_data$Gene.ID))
+#length(rownames(merged_data))
+
+#dups <- merged_data$Gene.ID[duplicated(merged_data$Gene.ID)]
+#table(merged_data$Gene.ID[merged_data$Gene.ID %in% dups])
+
+dup_rows <- duplicated(merged_data$Gene.ID)
+merged_data_nodup <- merged_data[!dup_rows, ]
+
+#sum(is.na(merged_data_nodup$Gene.ID))
+#sum(duplicated(merged_data_nodup$Gene.ID))
+#length(rownames(merged_data_nodup))
+
+```
+
+Map the GENEIDs to ENSMBLE IDs and get information about genes to filter genes for protein coding genes only.
+
+```{r echo=TRUE, warning=FALSE}
+
+merged_data_nodup$ensembl <- mapIds(x = org.Mm.eg.db,
+                     keys = merged_data_nodup$Gene.ID,
+                     column = "ENSEMBL",
+                     keytype = "SYMBOL",
+                     multiVals = "first")
+
+
+# Set up the Ensembl BioMart database
+ensembl <- biomaRt::useMart("ensembl", dataset = "mmusculus_gene_ensembl")
+
+# Define the GeneIDs of interest
+gene_ids <- merged_data_nodup$ensembl
+
+# Retrieve the gene information for the specified GeneIDs
+gene_info <- biomaRt::getBM(attributes = c("ensembl_gene_id", "description", "gene_biotype"),
+                   filters = "ensembl_gene_id",
+                   values = gene_ids,
+                   mart = ensembl)
+
+# Filter for protein-coding genes
+protein_coding <- gene_info[gene_info$gene_biotype == "protein_coding", ]
+
+# Filter gene list for only protein-coding genes
+merged_protein_coding <- merged_data_nodup[merged_data_nodup$ensembl %in% protein_coding$ensembl_gene_id, ]
+
+
+```
+
+### Subsetting
+
+Using the FPKM values we then subset gene expression for each sample by region, where FPKM > 10 is indicative of high expression, FPKM > 1 but < 10 is indicative of moderate expression and FPKM <1 is indicative of low expression.
+
+#### CTX
+```{r}
+
+CTX8_High <- subset(merged_protein_coding, CTX8 > 10)
+CTX8_Med <- subset(merged_protein_coding, CTX8 <= 10 & CTX8 >= 1)
+CTX8_Low <- subset(merged_protein_coding, CTX8 < 1)
+
+CTX9_High <- subset(merged_protein_coding, CTX9 > 10)
+CTX9_Med <- subset(merged_protein_coding, CTX9 <= 10 & CTX9 >= 1)
+CTX9_Low <- subset(merged_protein_coding, CTX9 < 1)
+
+CTX8_High2 <- CTX8_High[c("Gene.ID","CTX8","ensembl")]
+CTX8_Med2 <- CTX8_Med[c("Gene.ID","CTX8","ensembl")]
+CTX8_Low2 <- CTX8_Low[c("Gene.ID","CTX8","ensembl")]
+
+CTX9_High2 <- CTX9_High[c("Gene.ID","CTX9","ensembl")]
+CTX9_Med2 <- CTX9_Med[c("Gene.ID","CTX9","ensembl")]
+CTX9_Low2 <- CTX9_Low[c("Gene.ID","CTX9","ensembl")]
+
+```
+
+#### VTA
+
+```{r}
+
+VTA8_High <- subset(merged_protein_coding, VTA8 > 10)
+VTA8_Med <- subset(merged_protein_coding, VTA8 <= 10 & VTA8 >= 1)
+VTA8_Low <- subset(merged_protein_coding, VTA8 < 1)
+
+VTA9_High <- subset(merged_protein_coding, VTA9 > 10)
+VTA9_Med <- subset(merged_protein_coding, VTA9 <= 10 & VTA9 >= 1)
+VTA9_Low <- subset(merged_protein_coding, VTA9 < 1)
+
+VTA8_High2 <- VTA8_High[c("Gene.ID","VTA8","ensembl")]
+VTA8_Med2 <- VTA8_Med[c("Gene.ID","VTA8","ensembl")]
+VTA8_Low2 <- VTA8_Low[c("Gene.ID","VTA8","ensembl")]
+
+VTA9_High2 <- VTA9_High[c("Gene.ID","VTA9","ensembl")]
+VTA9_Med2 <- VTA9_Med[c("Gene.ID","VTA9","ensembl")]
+VTA9_Low2 <- VTA9_Low[c("Gene.ID","VTA9","ensembl")]
+
+```
+
+#### STR
+
+```{r}
+
+STR8_High <- subset(merged_protein_coding, STR8 > 10)
+STR8_Med <- subset(merged_protein_coding, STR8 <= 10 & STR8 >= 1)
+STR8_Low <- subset(merged_protein_coding, STR8 < 1)
+
+STR9_High <- subset(merged_protein_coding, STR9 > 10)
+STR9_Med <- subset(merged_protein_coding, STR9 <= 10 & STR9 >= 1)
+STR9_Low <- subset(merged_protein_coding, STR9 < 1)
+
+STR8_High2 <- STR8_High[c("Gene.ID","STR8","ensembl")]
+STR8_Med2 <- STR8_Med[c("Gene.ID","STR8","ensembl")]
+STR8_Low2 <- STR8_Low[c("Gene.ID","STR8","ensembl")]
+
+STR9_High2 <- STR9_High[c("Gene.ID","STR9","ensembl")]
+STR9_Med2 <- STR9_Med[c("Gene.ID","STR9","ensembl")]
+STR9_Low2 <- STR9_Low[c("Gene.ID","STR9","ensembl")]
+
+```
+
+#### HPP
+
+```{r}
+HPP8_High <- subset(merged_protein_coding, HPP8 > 10)
+HPP8_Med <- subset(merged_protein_coding, HPP8 <= 10 & HPP8 >= 1)
+HPP8_Low <- subset(merged_protein_coding, HPP8 < 1)
+
+HPP9_High <- subset(merged_protein_coding, HPP9 > 10)
+HPP9_Med <- subset(merged_protein_coding, HPP9 <= 10 & HPP9 >= 1)
+HPP9_Low <- subset(merged_protein_coding, HPP9 < 1)
+
+HPP8_High2 <- HPP8_High[c("Gene.ID","HPP8","ensembl")]
+HPP8_Med2 <- HPP8_Med[c("Gene.ID","HPP8","ensembl")]
+HPP8_Low2 <- HPP8_Low[c("Gene.ID","HPP8","ensembl")]
+
+HPP9_High2 <- HPP9_High[c("Gene.ID","HPP9","ensembl")]
+HPP9_Med2 <- HPP9_Med[c("Gene.ID","HPP9","ensembl")]
+HPP9_Low2 <- HPP9_Low[c("Gene.ID","HPP9","ensembl")]
+
+```
+
+#### PFC
+
+```{r}
+PFC8_High <- subset(merged_protein_coding, PFC8 > 10)
+PFC8_Med <- subset(merged_protein_coding, PFC8 <= 10 & PFC8 >= 1)
+PFC8_Low <- subset(merged_protein_coding, PFC8 < 1)
+
+PFC9_High <- subset(merged_protein_coding, PFC9 > 10)
+PFC9_Med <- subset(merged_protein_coding, PFC9 <= 10 & PFC9 >= 1)
+PFC9_Low <- subset(merged_protein_coding, PFC9 < 1)
+
+PFC8_High2 <- PFC8_High[c("Gene.ID","PFC8","ensembl")]
+PFC8_Med2 <- PFC8_Med[c("Gene.ID","PFC8","ensembl")]
+PFC8_Low2 <- PFC8_Low[c("Gene.ID","PFC8","ensembl")]
+
+PFC9_High2 <- PFC9_High[c("Gene.ID","PFC9","ensembl")]
+PFC9_Med2 <- PFC9_Med[c("Gene.ID","PFC9","ensembl")]
+PFC9_Low2 <- PFC9_Low[c("Gene.ID","PFC9","ensembl")]
+
+```
+
+### Generate GeneOverlap RNA Seq List
+
+```{r}
+
+MIC.RNASeq.list <- list("VTA8_High"= VTA8_High2$ensembl, "VTA8_Med" = VTA8_Med2$ensembl, "VTA8_Low"= VTA8_Low2$ensembl,
+                        "VTA9_High"= VTA9_High2$ensembl, "VTA9_Med" = VTA9_Med2$ensembl, "VTA9_Low"= VTA9_Low2$ensembl,
+                        "STR8_High"= STR8_High2$ensembl, "STR8_Med" = STR8_Med2$ensembl, "STR8_Low"= STR8_Low2$ensembl,
+                        "STR9_High"= STR9_High2$ensembl, "STR9_Med" = STR9_Med2$ensembl, "STR9_Low"= STR9_Low2$ensembl,
+                        "HPP8_High"= HPP8_High2$ensembl, "HPP8_Med" = HPP8_Med2$ensembl, "HPP8_Low"= HPP8_Low2$ensembl,
+                        "HPP9_High"= HPP9_High2$ensembl, "HPP9_Med" = HPP9_Med2$ensembl, "HPP9_Low"= HPP9_Low2$ensembl,
+                        "PFC8_High"= PFC8_High2$ensembl, "PFC8_Med" = PFC8_Med2$ensembl, "PFC8_Low"= PFC8_Low2$ensembl,
+                        "PFC9_High"= PFC9_High2$ensembl, "PFC9_Med" = PFC9_Med2$ensembl, "PFC9_Low"= PFC9_Low2$ensembl,
+                        "CTX8_High"= CTX8_High2$ensembl, "CTX8_Med" = CTX8_Med2$ensembl, "CTX8_Low"= CTX8_Low2$ensembl,
+                        "CTX9_High"= CTX9_High2$ensembl, "CTX9_Med" = CTX9_Med2$ensembl, "CTX9_Low"= CTX9_Low2$ensembl)
+
+#sum(is.na(merged_protein_coding$ensembl))
+
+gs.RNAseq <- length(merged_protein_coding$ensembl)
+
+```
+
+
+# CATD Data Loading
+
+## First load in the annotated Peaks files from HOMER
+
+Here we utilized HOMER to annotate our significantly called peaks. That can be done using the below code saved as a shell file (.sh).
+
+```{bash eval=FALSE, include=FALSE}
+
+#!/bin/bash
+
+projPath="/peakCalling/SEACR/normalized"
+outDir="/peakCalling/SEACR/HOMER"
+
+mkdir /peakCalling_subsample/SEACR/HOMER
+
+export PATH="/home/avm27/HOMER/bin:$PATH"
+
+echo "Annotating Peaks Using HOMER"
+
+for histName in $(find FASTQ -type f -name "*.fastq.gz" | while read F; do basename $F | rev | cut -c 28- | rev; done | sort | uniq)
+do
+    echo "HOMER Annotation for ${histName}"
+    
+    annotatePeaks.pl $projPath/${histName}_dupMarked_merge_normalized_spikein_seacr_control.peaks.stringent.bed mm10 > $outDir/${histName}_annot.txt
+   
+done
+
+```
+
+Following Annotation, we read our files in.
+
+```{r fig.height=24, fig.width=24}
+CTX8_Anno <- read.delim("/peakCalling/SEACR/HOMER/CTX8_H3K27ac_annot.txt", sep= "\t", header = TRUE)
+CTX9_Anno <- read.delim("/peakCalling/SEACR/HOMER/CTX9_H3K27ac_annot.txt", sep= "\t", header = TRUE)
+PFC8_Anno <- read.delim("/peakCalling/SEACR/HOMER/PFC8_H3K27ac_annot.txt", sep= "\t", header = TRUE)
+PFC9_Anno <- read.delim("/peakCalling/SEACR/HOMER/PFC9_H3K27ac_annot.txt", sep= "\t", header = TRUE)
+HPP8_Anno <- read.delim("/peakCalling/SEACR/HOMER/HPP8_H3K27ac_annot.txt", sep= "\t", header = TRUE)
+HPP9_Anno <- read.delim("/peakCalling/SEACR/HOMER/HPP9_H3K27ac_annot.txt", sep= "\t", header = TRUE)
+VTA8_Anno <- read.delim("/peakCalling/SEACR/HOMER/VTA8_H3K27ac_annot.txt", sep= "\t", header = TRUE)
+VTA9_Anno <- read.delim("/peakCalling/SEACR/HOMER/VTA9_H3K27ac_annot.txt", sep= "\t", header = TRUE)
+STR8_Anno <- read.delim("/peakCalling/SEACR/HOMER/STR8_H3K27ac_annot.txt", sep= "\t", header = TRUE)
+STR9_Anno <- read.delim("/peakCalling/SEACR/HOMER/STR9_H3K27ac_annot.txt", sep= "\t", header = TRUE)
+
+
+CTX8_Anno_me3 <- read.delim("/peakCalling/SEACR/HOMER/CTX8_H3K27me3_annot.txt", sep= "\t", header = TRUE)
+CTX9_Anno_me3 <- read.delim("/peakCalling/SEACR/HOMER/CTX9_H3K27me3_annot.txt", sep= "\t", header = TRUE)
+PFC8_Anno_me3 <- read.delim("/peakCalling/SEACR/HOMER/PFC8_H3K27me3_annot.txt", sep= "\t", header = TRUE)
+PFC9_Anno_me3 <- read.delim("/peakCalling/SEACR/HOMER/PFC9_H3K27me3_annot.txt", sep= "\t", header = TRUE)
+HPP8_Anno_me3 <- read.delim("/peakCalling/SEACR/HOMER/HPP8_H3K27me3_annot.txt", sep= "\t", header = TRUE)
+HPP9_Anno_me3 <- read.delim("/peakCalling/SEACR/HOMER/HPP9_H3K27me3_annot.txt", sep= "\t", header = TRUE)
+VTA8_Anno_me3 <- read.delim("/peakCalling/SEACR/HOMER/VTA8_H3K27me3_annot.txt", sep= "\t", header = TRUE)
+VTA9_Anno_me3 <- read.delim("/peakCalling/SEACR/HOMER/VTA9_H3K27me3_annot.txt", sep= "\t", header = TRUE)
+STR8_Anno_me3 <- read.delim("/peakCalling/SEACR/HOMER/STR8_H3K27me3_annot.txt", sep= "\t", header = TRUE)
+STR9_Anno_me3 <- read.delim("/peakCalling/SEACR/HOMER/STR9_H3K27me3_annot.txt", sep= "\t", header = TRUE)
+
+```
+
+
+## Pull out only genes of interest 
+
+(i.e Protein Coding Genes) and exclude marks that fall into exons for K27ac and include exons for K27me3.
+
+```{r fig.height=40, fig.width=40}
+
+CTX8_Anno_Promoter <- CTX8_Anno %>% filter(str_detect(Annotation, "promoter|promoter-TSS|TSS"))
+CTX8_Anno_Promoter_ProteinCoding <- CTX8_Anno_Promoter %>% filter(str_detect(Gene.Type, "protein"))
+
+CTX9_Anno_Promoter <- CTX9_Anno %>% filter(str_detect(Annotation, "promoter|promoter-TSS|TSS"))
+CTX9_Anno_Promoter_ProteinCoding <- CTX9_Anno_Promoter %>% filter(str_detect(Gene.Type, "protein"))
+
+PFC8_Anno_Promoter <- PFC8_Anno %>% filter(str_detect(Annotation, "promoter|promoter-TSS|TSS"))
+PFC8_Anno_Promoter_ProteinCoding <- PFC8_Anno_Promoter %>% filter(str_detect(Gene.Type, "protein"))
+
+PFC9_Anno_Promoter <- PFC9_Anno %>% filter(str_detect(Annotation, "promoter|promoter-TSS|TSS"))
+PFC9_Anno_Promoter_ProteinCoding <- PFC9_Anno_Promoter %>% filter(str_detect(Gene.Type, "protein"))
+
+STR8_Anno_Promoter <- STR8_Anno %>% filter(str_detect(Annotation, "promoter|promoter-TSS|TSS"))
+STR8_Anno_Promoter_ProteinCoding <- STR8_Anno_Promoter %>% filter(str_detect(Gene.Type, "protein"))
+
+STR9_Anno_Promoter <- STR9_Anno %>% filter(str_detect(Annotation, "promoter|promoter-TSS|TSS"))
+STR9_Anno_Promoter_ProteinCoding <- STR9_Anno_Promoter %>% filter(str_detect(Gene.Type, "protein"))
+
+VTA8_Anno_Promoter <- VTA8_Anno %>% filter(str_detect(Annotation, "promoter|promoter-TSS|TSS"))
+VTA8_Anno_Promoter_ProteinCoding <- VTA8_Anno_Promoter %>% filter(str_detect(Gene.Type, "protein"))
+
+VTA9_Anno_Promoter <- VTA9_Anno %>% filter(str_detect(Annotation, "promoter|promoter-TSS|TSS"))
+VTA9_Anno_Promoter_ProteinCoding <- VTA9_Anno_Promoter %>% filter(str_detect(Gene.Type, "protein"))
+
+HPP8_Anno_Promoter <- HPP8_Anno %>% filter(str_detect(Annotation, "promoter|promoter-TSS|TSS"))
+HPP8_Anno_Promoter_ProteinCoding <- HPP8_Anno_Promoter %>% filter(str_detect(Gene.Type, "protein"))
+
+HPP9_Anno_Promoter <- HPP9_Anno %>% filter(str_detect(Annotation, "promoter|promoter-TSS|TSS"))
+HPP9_Anno_Promoter_ProteinCoding <- HPP9_Anno_Promoter %>% filter(str_detect(Gene.Type, "protein"))
+
+
+CTX8_Anno_me3_Promoter <- CTX8_Anno_me3 %>% filter(str_detect(Annotation, c("promoter|exon|promoter-TSS|TSS")))
+CTX8_Anno_me3_Promoter_ProteinCoding <- CTX8_Anno_me3_Promoter %>% filter(str_detect(Gene.Type, "protein"))
+
+CTX9_Anno_me3_promoter <- CTX9_Anno_me3 %>% filter(str_detect(Annotation, "promoter|exon|promoter-TSS|TSS"))
+CTX9_Anno_me3_Promoter_ProteinCoding <- CTX9_Anno_me3_promoter %>% filter(str_detect(Gene.Type, "protein"))
+
+PFC8_Anno_me3_Promoter <- PFC8_Anno_me3 %>% filter(str_detect(Annotation, "promoter|exon|promoter-TSS|TSS"))
+PFC8_Anno_me3_Promoter_ProteinCoding <- PFC8_Anno_me3_Promoter %>% filter(str_detect(Gene.Type, "protein"))
+
+PFC9_Anno_me3_Promoter <- PFC9_Anno_me3 %>% filter(str_detect(Annotation, "promoter|exon|promoter-TSS|TSS"))
+PFC9_Anno_me3_Promoter_ProteinCoding <- PFC9_Anno_me3_Promoter %>% filter(str_detect(Gene.Type, "protein"))
+
+STR8_Anno_me3_Promoter <- STR8_Anno_me3 %>% filter(str_detect(Annotation, "promoter|exon|promoter-TSS|TSS"))
+STR8_Anno_me3_Promoter_ProteinCoding <- STR8_Anno_me3_Promoter %>% filter(str_detect(Gene.Type, "protein"))
+
+STR9_Anno_me3_Promoter <- STR9_Anno_me3 %>% filter(str_detect(Annotation, "promoter|exon|promoter-TSS|TSS"))
+STR9_Anno_me3_Promoter_ProteinCoding <- STR9_Anno_me3_Promoter %>% filter(str_detect(Gene.Type, "protein"))
+
+VTA8_Anno_me3_Promoter <- VTA8_Anno_me3 %>% filter(str_detect(Annotation, "promoter|exon|promoter-TSS|TSS"))
+VTA8_Anno_me3_Promoter_ProteinCoding <- VTA8_Anno_me3_Promoter %>% filter(str_detect(Gene.Type, "protein"))
+
+VTA9_Anno_me3_Promoter <- VTA9_Anno_me3 %>% filter(str_detect(Annotation, "promoter|exon|promoter-TSS|TSS"))
+VTA9_Anno_me3_Promoter_ProteinCoding <- VTA9_Anno_me3_Promoter %>% filter(str_detect(Gene.Type, "protein"))
+
+HPP8_Anno_me3_Promoter <- HPP8_Anno_me3 %>% filter(str_detect(Annotation, "promoter|exon|promoter-TSS|TSS"))
+HPP8_Anno_me3_Promoter_ProteinCoding <- HPP8_Anno_me3_Promoter %>% filter(str_detect(Gene.Type, "protein"))
+
+HPP9_Anno_me3_Promoter <- HPP9_Anno_me3 %>% filter(str_detect(Annotation, "promoter|exon|promoter-TSS|TSS"))
+HPP9_Anno_me3_Promoter_ProteinCoding <- HPP9_Anno_me3_Promoter %>% filter(str_detect(Gene.Type, "protein"))
+```
+
+## Create GeneOverlap Files for each mark individually and together
+
+### H3K27ac List
+```{r}
+
+CAT.K27ac.list <- list("PFC8_H3K27ac"= PFC8_Anno_Promoter_ProteinCoding$Nearest.Ensembl, "PFC9_H3K27ac" = PFC9_Anno_Promoter_ProteinCoding$Nearest.Ensembl,
+                "STR8_H3K27ac"= STR8_Anno_Promoter_ProteinCoding$Nearest.Ensembl, "STR9_H3K27ac" = STR9_Anno_Promoter_ProteinCoding$Nearest.Ensembl,
+                "HPP8_H3K27ac"= HPP8_Anno_Promoter_ProteinCoding$Nearest.Ensembl, "HPP9_H3K27ac" = HPP9_Anno_Promoter_ProteinCoding$Nearest.Ensembl,
+                "VTA8_H3K27ac"= VTA8_Anno_Promoter_ProteinCoding$Nearest.Ensembl, "VTA9_H3K27ac" = VTA9_Anno_Promoter_ProteinCoding$Nearest.Ensembl,
+                "CTX8_H3K27ac"= CTX8_Anno_Promoter_ProteinCoding$Nearest.Ensembl, "CTX9_H3K27ac" = CTX9_Anno_Promoter_ProteinCoding$Nearest.Ensembl)
+```
+
+### H3K27me3 List
+
+```{r}
+
+CAT.K27me3.list <- list("PFC8_H3K27me3"= PFC8_Anno_me3_Promoter_ProteinCoding$Nearest.Ensembl, "PFC9_H3K27me3" = PFC9_Anno_me3_Promoter_ProteinCoding$Nearest.Ensembl,
+                "STR8_H3K27me3"= STR8_Anno_me3_Promoter_ProteinCoding$Nearest.Ensembl, "STR9_H3K27me3" = STR9_Anno_me3_Promoter_ProteinCoding$Nearest.Ensembl,
+                "HPP8_H3K27me3"= HPP8_Anno_me3_Promoter_ProteinCoding$Nearest.Ensembl, "HPP9_H3K27me3" = HPP9_Anno_me3_Promoter_ProteinCoding$Nearest.Ensembl,
+                "VTA8_H3K27me3"= VTA8_Anno_me3_Promoter_ProteinCoding$Nearest.Ensembl, "VTA9_H3K27me3" = VTA9_Anno_me3_Promoter_ProteinCoding$Nearest.Ensembl,
+                "CTX8_H3K27me3"= CTX8_Anno_me3_Promoter_ProteinCoding$Nearest.Ensembl, "CTX9_H3K27me3" = CTX9_Anno_me3_Promoter_ProteinCoding$Nearest.Ensembl)
+
+```
+
+### Full List
+
+```{r}
+
+CAT.list <- list("PFC8_H3K27ac"= PFC8_Anno_Promoter_ProteinCoding$Nearest.Ensembl, "PFC9_H3K27ac" = PFC9_Anno_Promoter_ProteinCoding$Nearest.Ensembl,
+                "STR8_H3K27ac"= STR8_Anno_Promoter_ProteinCoding$Nearest.Ensembl, "STR9_H3K27ac" = STR9_Anno_Promoter_ProteinCoding$Nearest.Ensembl,
+                "HPP8_H3K27ac"= HPP8_Anno_Promoter_ProteinCoding$Nearest.Ensembl, "HPP9_H3K27ac" = HPP9_Anno_Promoter_ProteinCoding$Nearest.Ensembl,
+                "VTA8_H3K27ac"= VTA8_Anno_Promoter_ProteinCoding$Nearest.Ensembl, "VTA9_H3K27ac" = VTA9_Anno_Promoter_ProteinCoding$Nearest.Ensembl,
+                "CTX8_H3K27ac"= CTX8_Anno_Promoter_ProteinCoding$Nearest.Ensembl, "CTX9_H3K27ac" = CTX9_Anno_Promoter_ProteinCoding$Nearest.Ensembl,
+                "PFC8_H3K27me3"= PFC8_Anno_me3_Promoter_ProteinCoding$Nearest.Ensembl, "PFC9_H3K27me3" = PFC9_Anno_me3_Promoter_ProteinCoding$Nearest.Ensembl,
+                "STR8_H3K27me3"= STR8_Anno_me3_Promoter_ProteinCoding$Nearest.Ensembl, "STR9_H3K27me3" = STR9_Anno_me3_Promoter_ProteinCoding$Nearest.Ensembl,
+                "HPP8_H3K27me3"= HPP8_Anno_me3_Promoter_ProteinCoding$Nearest.Ensembl, "HPP9_H3K27me3" = HPP9_Anno_me3_Promoter_ProteinCoding$Nearest.Ensembl,
+                "VTA8_H3K27me3"= VTA8_Anno_me3_Promoter_ProteinCoding$Nearest.Ensembl, "VTA9_H3K27me3" = VTA9_Anno_me3_Promoter_ProteinCoding$Nearest.Ensembl,
+                "CTX8_H3K27me3"= CTX8_Anno_me3_Promoter_ProteinCoding$Nearest.Ensembl, "CTX9_H3K27me3" = CTX9_Anno_me3_Promoter_ProteinCoding$Nearest.Ensembl)
+```
+
+
+# Run GeneOverlap to test expression levels with presence of histone marks
+## Heatmap for all samples
+```{r fig.height=10, fig.width=30}
+
+gom.obj <- newGOM(CAT.list, MIC.RNASeq.list, gs.RNAseq)
+
+#pdf("output/RNASeq_CATD_Overlaps/HeatmapofGeneOverlapAll.pdf", width = 30, height=10)
+drawHeatmap(gom.obj,
+log.scale=F, adj.p=T, cutoff=.05, ncolused=9, note.col = "black")
+#dev.off()
+
+```
+
+# Running individual overlaps
+### H3K27ac against High FPKM Genes
+```{r paged.print=TRUE}
+################# test Individual Expression Levels (H3K27ac -- High) ###################
+
+go.obj.PFC8_AC_High <- newGeneOverlap(CAT.K27ac.list$PFC8_H3K27ac, MIC.RNASeq.list$PFC8_High, genome.size=gs.RNAseq)
+go.obj.PFC8_AC_High <- testGeneOverlap(go.obj.PFC8_AC_High)
+go.obj.PFC8_AC_High
+
+go.obj.PFC9_AC_High <- newGeneOverlap(CAT.K27ac.list$PFC9_H3K27ac, MIC.RNASeq.list$PFC9_High, genome.size=gs.RNAseq)
+go.obj.PFC9_AC_High <- testGeneOverlap(go.obj.PFC9_AC_High)
+go.obj.PFC9_AC_High
+
+go.obj.HPP8_AC_High <- newGeneOverlap(CAT.K27ac.list$HPP8_H3K27ac, MIC.RNASeq.list$HPP8_High, genome.size=gs.RNAseq)
+go.obj.HPP8_AC_High <- testGeneOverlap(go.obj.HPP8_AC_High)
+go.obj.HPP8_AC_High
+
+go.obj.HPP9_AC_High <- newGeneOverlap(CAT.K27ac.list$HPP9_H3K27ac, MIC.RNASeq.list$HPP9_High, genome.size=gs.RNAseq)
+go.obj.HPP9_AC_High <- testGeneOverlap(go.obj.HPP9_AC_High)
+go.obj.HPP9_AC_High
+
+go.obj.STR8_AC_High <- newGeneOverlap(CAT.K27ac.list$STR8_H3K27ac, MIC.RNASeq.list$STR8_High, genome.size=gs.RNAseq)
+go.obj.STR8_AC_High <- testGeneOverlap(go.obj.STR8_AC_High)
+go.obj.STR8_AC_High
+
+go.obj.STR9_AC_High <- newGeneOverlap(CAT.K27ac.list$STR9_H3K27ac, MIC.RNASeq.list$STR9_High, genome.size=gs.RNAseq)
+go.obj.STR9_AC_High <- testGeneOverlap(go.obj.STR9_AC_High)
+go.obj.STR9_AC_High
+
+go.obj.VTA8_AC_High <- newGeneOverlap(CAT.K27ac.list$VTA8_H3K27ac, MIC.RNASeq.list$VTA8_High, genome.size=gs.RNAseq)
+go.obj.VTA8_AC_High <- testGeneOverlap(go.obj.VTA8_AC_High)
+go.obj.VTA8_AC_High
+
+go.obj.VTA9_AC_High <- newGeneOverlap(CAT.K27ac.list$VTA9_H3K27ac, MIC.RNASeq.list$VTA9_High, genome.size=gs.RNAseq)
+go.obj.VTA9_AC_High <- testGeneOverlap(go.obj.VTA9_AC_High)
+go.obj.VTA9_AC_High
+
+go.obj.CTX8_AC_High <- newGeneOverlap(CAT.K27ac.list$CTX8_H3K27ac, MIC.RNASeq.list$CTX8_High, genome.size=gs.RNAseq)
+go.obj.CTX8_AC_High <- testGeneOverlap(go.obj.CTX8_AC_High)
+go.obj.CTX8_AC_High
+
+go.obj.CTX9_AC_High <- newGeneOverlap(CAT.K27ac.list$CTX9_H3K27ac, MIC.RNASeq.list$CTX9_High, genome.size=gs.RNAseq)
+go.obj.CTX9_AC_High <- testGeneOverlap(go.obj.CTX9_AC_High)
+go.obj.CTX9_AC_High
+```
+
+### H3K27me3 against Low FPKM Genes
+```{r}
+go.obj.PFC8_ME_Low <- newGeneOverlap(CAT.K27me3.list$PFC8_H3K27me3, MIC.RNASeq.list$PFC8_Low, genome.size=gs.RNAseq)
+go.obj.PFC8_ME_Low <- testGeneOverlap(go.obj.PFC8_ME_Low)
+go.obj.PFC8_ME_Low
+
+go.obj.PFC9_ME_Low <- newGeneOverlap(CAT.K27me3.list$PFC9_H3K27me3, MIC.RNASeq.list$PFC9_Low, genome.size=gs.RNAseq)
+go.obj.PFC9_ME_Low <- testGeneOverlap(go.obj.PFC9_ME_Low)
+go.obj.PFC9_ME_Low
+
+go.obj.HPP8_ME_Low <- newGeneOverlap(CAT.K27me3.list$HPP8_H3K27me3, MIC.RNASeq.list$HPP8_Low, genome.size=gs.RNAseq)
+go.obj.HPP8_ME_Low <- testGeneOverlap(go.obj.HPP8_ME_Low)
+go.obj.HPP8_ME_Low
+
+go.obj.HPP9_ME_Low <- newGeneOverlap(CAT.K27me3.list$HPP9_H3K27me3, MIC.RNASeq.list$HPP9_Low, genome.size=gs.RNAseq)
+go.obj.HPP9_ME_Low <- testGeneOverlap(go.obj.HPP9_ME_Low)
+go.obj.HPP9_ME_Low
+
+go.obj.STR8_ME_Low <- newGeneOverlap(CAT.K27me3.list$STR8_H3K27me3, MIC.RNASeq.list$STR8_Low, genome.size=gs.RNAseq)
+go.obj.STR8_ME_Low <- testGeneOverlap(go.obj.STR8_ME_Low)
+go.obj.STR8_ME_Low
+
+go.obj.STR9_ME_Low <- newGeneOverlap(CAT.K27me3.list$STR9_H3K27me3, MIC.RNASeq.list$STR9_Low, genome.size=gs.RNAseq)
+go.obj.STR9_ME_Low <- testGeneOverlap(go.obj.STR9_ME_Low)
+go.obj.STR9_ME_Low
+
+go.obj.VTA8_ME_Low <- newGeneOverlap(CAT.K27me3.list$VTA8_H3K27me3, MIC.RNASeq.list$VTA8_Low, genome.size=gs.RNAseq)
+go.obj.VTA8_ME_Low <- testGeneOverlap(go.obj.VTA8_ME_Low)
+go.obj.VTA8_ME_Low
+
+go.obj.VTA9_ME_Low <- newGeneOverlap(CAT.K27me3.list$VTA9_H3K27me3, MIC.RNASeq.list$VTA9_Low, genome.size=gs.RNAseq)
+go.obj.VTA9_ME_Low <- testGeneOverlap(go.obj.VTA9_ME_Low)
+go.obj.VTA9_ME_Low
+
+go.obj.CTX8_ME_Low <- newGeneOverlap(CAT.K27me3.list$CTX8_H3K27me3, MIC.RNASeq.list$CTX8_Low, genome.size=gs.RNAseq)
+go.obj.CTX8_ME_Low <- testGeneOverlap(go.obj.CTX8_ME_Low)
+go.obj.CTX8_ME_Low
+
+go.obj.CTX9_ME_Low <- newGeneOverlap(CAT.K27me3.list$CTX9_H3K27me3, MIC.RNASeq.list$CTX9_Low, genome.size=gs.RNAseq)
+go.obj.CTX9_ME_Low <- testGeneOverlap(go.obj.CTX9_ME_Low)
+go.obj.CTX9_ME_Low
+
+```
+
+## Take all terms that intersect and filter for only those that appear in both lists.
+### H3K27ac
+
+```{r paged.print=FALSE}
+PFC8_AC_High <- as.data.frame(as.matrix(go.obj.PFC8_AC_High@intersection))
+PFC9_AC_High <- as.data.frame(as.matrix(go.obj.PFC9_AC_High@intersection))
+HPP8_AC_High <- as.data.frame(as.matrix(go.obj.HPP8_AC_High@intersection))
+HPP9_AC_High <- as.data.frame(as.matrix(go.obj.HPP9_AC_High@intersection))
+STR8_AC_High <- as.data.frame(as.matrix(go.obj.STR8_AC_High@intersection))
+STR9_AC_High <- as.data.frame(as.matrix(go.obj.STR9_AC_High@intersection))
+VTA8_AC_High <- as.data.frame(as.matrix(go.obj.VTA8_AC_High@intersection))
+VTA9_AC_High <- as.data.frame(as.matrix(go.obj.VTA9_AC_High@intersection))
+CTX8_AC_High <- as.data.frame(as.matrix(go.obj.CTX8_AC_High@intersection))
+CTX9_AC_High <- as.data.frame(as.matrix(go.obj.CTX9_AC_High@intersection))
+
+PFC_AC_High <- PFC8_AC_High[PFC8_AC_High$V1 %in% PFC9_AC_High$V1, ]
+HPP_AC_High <- HPP9_AC_High[HPP9_AC_High$V1 %in% HPP8_AC_High$V1, ]
+STR_AC_High <- STR9_AC_High[STR9_AC_High$V1 %in% STR8_AC_High$V1, ]
+VTA_AC_High <- VTA9_AC_High[VTA9_AC_High$V1 %in% VTA8_AC_High$V1, ]
+CTX_AC_High <- CTX9_AC_High[CTX9_AC_High$V1 %in% CTX8_AC_High$V1, ]
+
+Overlapping_AC_High <- as.matrix(c(length(PFC_AC_High), length(STR_AC_High), length(VTA_AC_High), length(HPP_AC_High), length(CTX_AC_High)))
+
+Overlapping_AC <- data.frame(AC_High = Overlapping_AC_High)
+
+rownames(Overlapping_AC) <- c("PFC","STR","VTA","HPP", "CTX")
+
+kableExtra::kable(Overlapping_AC)
+```
+
+### H3K27me3
+
+```{r paged.print=FALSE}
+
+PFC8_ME_Low <- as.data.frame(as.matrix(go.obj.PFC8_ME_Low@intersection))
+PFC9_ME_Low <- as.data.frame(as.matrix(go.obj.PFC9_ME_Low@intersection))
+HPP8_ME_Low <- as.data.frame(as.matrix(go.obj.HPP8_ME_Low@intersection))
+HPP9_ME_Low <- as.data.frame(as.matrix(go.obj.HPP9_ME_Low@intersection))
+STR8_ME_Low <- as.data.frame(as.matrix(go.obj.STR8_ME_Low@intersection))
+STR9_ME_Low <- as.data.frame(as.matrix(go.obj.STR9_ME_Low@intersection))
+VTA8_ME_Low <- as.data.frame(as.matrix(go.obj.VTA8_ME_Low@intersection))
+VTA9_ME_Low <- as.data.frame(as.matrix(go.obj.VTA9_ME_Low@intersection))
+CTX8_ME_Low <- as.data.frame(as.matrix(go.obj.CTX8_ME_Low@intersection))
+CTX9_ME_Low <- as.data.frame(as.matrix(go.obj.CTX9_ME_Low@intersection))
+
+PFC_ME_Low <- PFC8_ME_Low[PFC8_ME_Low$V1 %in% PFC9_ME_Low$V1, ]
+HPP_ME_Low <- HPP8_ME_Low[HPP8_ME_Low$V1 %in% HPP9_ME_Low$V1, ]
+STR_ME_Low <- STR9_ME_Low[STR9_ME_Low$V1 %in% STR8_ME_Low$V1, ]
+VTA_ME_Low <- VTA9_ME_Low[VTA9_ME_Low$V1 %in% VTA8_ME_Low$V1, ]
+CTX_ME_Low <- CTX9_ME_Low[CTX9_ME_Low$V1 %in% CTX8_ME_Low$V1, ]
+
+Overlapping_ME_Low <- as.matrix(c(length(PFC_ME_Low), length(STR_ME_Low), length(VTA_ME_Low), length(HPP_ME_Low), length(CTX_ME_Low)))
+
+Overlapping_ME <- data.frame(ME_Low = Overlapping_ME_Low)
+
+rownames(Overlapping_ME) <- c("PFC","STR","VTA","HPP", "CTX")
+
+kableExtra::kable(Overlapping_ME)
+
+```
+
+### All
+```{r paged.print=FALSE}
+
+Overlapping_ALL <- data.frame(AC_High = Overlapping_AC_High, ME_Low = Overlapping_ME_Low)
+
+rownames(Overlapping_ALL) <- c("PFC","STR","VTA","HPP", "CTX")
+
+kableExtra::kable(Overlapping_ALL)
+
+```
+
+### Generating Plots
+
+```{r fig.height=10, fig.width=10, message=FALSE, warning=FALSE, paged.print=FALSE}
+
+ggplot(Overlapping_AC, aes(y=Overlapping_AC$AC_High, x= rownames(Overlapping_AC), color = rownames(Overlapping_AC), label = Overlapping_AC$AC_High))+
+  geom_col(aes(fill=rownames(Overlapping_AC)))+
+  theme_bw()+
+  labs(title = "Intersection of Highly Expressed Genes Marked with K27ac", x = "Brain Reigon", y = "Number of Replicated Genes")+
+  geom_label(aes(x=rownames(Overlapping_AC), y = Overlapping_AC$AC_High))
+
+
+
+ggplot(Overlapping_ME, aes(y=Overlapping_ME$ME_Low, x= rownames(Overlapping_ME), color = rownames(Overlapping_ME), label =Overlapping_ME$ME_Low))+
+  geom_col(aes(fill=rownames(Overlapping_ME)))+
+  theme_bw()+
+  labs(title = "Intersection of Lowly Expressed Genes Marked with K27me3", x = "Brain Reigon", y = "Number of Replicated Genes")+
+  geom_label(aes(x=rownames(Overlapping_ME), y = Overlapping_ME$ME_Low))
+  
+```
+
+# Identify Uniquely overlapping genes
+
+### H3K27ac
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+
+## How many of those above genes are the same in each Sample ###
+PFC_AC_High_Comp <- as.data.frame(matrix(PFC_AC_High))
+VTA_AC_High_Comp <- as.data.frame(matrix(VTA_AC_High))
+STR_AC_High_Comp <- as.data.frame(matrix(STR_AC_High))
+HPP_AC_High_Comp <- as.data.frame(matrix(HPP_AC_High))
+CTX_AC_High_Comp <- as.data.frame(matrix(CTX_AC_High))
+
+PvV_AC_High <- as.data.frame(matrix(PFC_AC_High_Comp[PFC_AC_High_Comp$V1 %in% VTA_AC_High_Comp$V1, ]))
+PvC_AC_High <- as.data.frame(matrix(PFC_AC_High_Comp[PFC_AC_High_Comp$V1 %in% CTX_AC_High_Comp$V1, ]))
+PvS_AC_High <- as.data.frame(matrix(PFC_AC_High_Comp[PFC_AC_High_Comp$V1 %in% HPP_AC_High_Comp$V1, ]))
+PvH_AC_High <- as.data.frame(matrix(PFC_AC_High_Comp[PFC_AC_High_Comp$V1 %in% STR_AC_High_Comp$V1, ]))
+
+VvP_AC_High <- as.data.frame(matrix(VTA_AC_High_Comp[VTA_AC_High_Comp$V1 %in% PFC_AC_High_Comp$V1, ]))
+VvC_AC_High <- as.data.frame(matrix(VTA_AC_High_Comp[VTA_AC_High_Comp$V1 %in% CTX_AC_High_Comp$V1, ]))
+VvS_AC_High <- as.data.frame(matrix(VTA_AC_High_Comp[VTA_AC_High_Comp$V1 %in% STR_AC_High_Comp$V1, ]))
+VvH_AC_High <- as.data.frame(matrix(VTA_AC_High_Comp[VTA_AC_High_Comp$V1 %in% HPP_AC_High_Comp$V1, ]))
+
+SvP_AC_High <- as.data.frame(matrix(STR_AC_High_Comp[STR_AC_High_Comp$V1 %in% PFC_AC_High_Comp$V1, ]))
+SvC_AC_High <- as.data.frame(matrix(STR_AC_High_Comp[STR_AC_High_Comp$V1 %in% CTX_AC_High_Comp$V1, ]))
+SvV_AC_High <- as.data.frame(matrix(STR_AC_High_Comp[STR_AC_High_Comp$V1 %in% VTA_AC_High_Comp$V1, ]))
+SvH_AC_High <- as.data.frame(matrix(STR_AC_High_Comp[STR_AC_High_Comp$V1 %in% HPP_AC_High_Comp$V1, ]))
+
+HvP_AC_High <- as.data.frame(matrix(HPP_AC_High_Comp[HPP_AC_High_Comp$V1 %in% PFC_AC_High_Comp$V1, ]))
+HvC_AC_High <- as.data.frame(matrix(HPP_AC_High_Comp[HPP_AC_High_Comp$V1 %in% CTX_AC_High_Comp$V1, ]))
+HvV_AC_High <- as.data.frame(matrix(HPP_AC_High_Comp[HPP_AC_High_Comp$V1 %in% VTA_AC_High_Comp$V1, ]))
+HvS_AC_High <- as.data.frame(matrix(HPP_AC_High_Comp[HPP_AC_High_Comp$V1 %in% STR_AC_High_Comp$V1, ]))
+
+CvP_AC_High <- as.data.frame(matrix(CTX_AC_High_Comp[CTX_AC_High_Comp$V1 %in% PFC_AC_High_Comp$V1, ]))
+CvH_AC_High <- as.data.frame(matrix(CTX_AC_High_Comp[CTX_AC_High_Comp$V1 %in% HPP_AC_High_Comp$V1, ]))
+CvV_AC_High <- as.data.frame(matrix(CTX_AC_High_Comp[CTX_AC_High_Comp$V1 %in% VTA_AC_High_Comp$V1, ]))
+CvS_AC_High <- as.data.frame(matrix(CTX_AC_High_Comp[CTX_AC_High_Comp$V1 %in% STR_AC_High_Comp$V1, ]))
+
+
+PvAll_Int <- rbind(PvV_AC_High,PvC_AC_High,PvS_AC_High, PvH_AC_High)
+VvAll_Int <- rbind(VvP_AC_High,VvC_AC_High,VvS_AC_High, VvH_AC_High)
+SvAll_Int <- rbind(SvP_AC_High,SvC_AC_High,SvV_AC_High, SvH_AC_High)
+HvAll_Int <- rbind(HvP_AC_High,HvC_AC_High,HvV_AC_High, HvS_AC_High)
+CvAll_Int <- rbind(CvP_AC_High,CvH_AC_High,CvV_AC_High, CvS_AC_High)
+
+dup_rows <- duplicated(PvAll_Int$V1)
+PvAll_Int <- PvAll_Int[!dup_rows, ]
+PvAll_Final <- as.data.frame(matrix(PvAll_Int))
+PFC_AC_High_Mat <- as.data.frame(matrix(PFC_AC_High))
+
+
+dup_rows <- duplicated(VvAll_Int$V1)
+VvAll_Int <- VvAll_Int[!dup_rows, ]
+VvAll_Final <- as.data.frame(matrix(VvAll_Int))
+VTA_AC_High_Mat <- as.data.frame(matrix(VTA_AC_High))
+
+dup_rows <- duplicated(SvAll_Int$V1)
+SvAll_Int <- SvAll_Int[!dup_rows, ]
+SvAll_Final <- as.data.frame(matrix(SvAll_Int))
+STR_AC_High_Mat <- as.data.frame(matrix(STR_AC_High))
+
+dup_rows <- duplicated(HvAll_Int$V1)
+HvAll_Int <- HvAll_Int[!dup_rows, ]
+HvAll_Final <- as.data.frame(matrix(HvAll_Int))
+HPP_AC_High_Mat <- as.data.frame(matrix(HPP_AC_High))
+
+dup_rows <- duplicated(CvAll_Int$V1)
+CvAll_Int <- CvAll_Int[!dup_rows, ]
+CvAll_Final <- as.data.frame(matrix(CvAll_Int))
+CTX_AC_High_Mat <- as.data.frame(matrix(CTX_AC_High))
+
+
+PFC_AC_High_Filt <- PFC_AC_High_Mat[!PFC_AC_High_Mat$V1 %in% PvAll_Final$V1, , drop = FALSE]
+VTA_AC_High_Filt <- VTA_AC_High_Mat[!VTA_AC_High_Mat$V1 %in% VvAll_Final$V1, , drop = FALSE]
+STR_AC_High_Filt <- STR_AC_High_Mat[!STR_AC_High_Mat$V1 %in% SvAll_Final$V1, , drop = FALSE]
+HPP_AC_High_Filt <- HPP_AC_High_Mat[!HPP_AC_High_Mat$V1 %in% HvAll_Final$V1, , drop = FALSE]
+CTX_AC_High_Filt <- CTX_AC_High_Mat[!CTX_AC_High_Mat$V1 %in% CvAll_Final$V1, , drop = FALSE]
+
+Overlapping_AC_High_Filt <- as.matrix(c(length(PFC_AC_High_Filt$V1), length(STR_AC_High_Filt$V1), length(VTA_AC_High_Filt$V1), length(HPP_AC_High_Filt$V1), length(CTX_AC_High_Filt$V1)))
+
+Overlapping_AC_Filt_High <- data.frame(AC_High = 
+                                         Overlapping_AC_High_Filt)
+
+rownames(Overlapping_AC_Filt_High) <- c("PFC","STR","VTA","HPP", "CTX")
+
+kableExtra::kable(Overlapping_AC_Filt_High)
+```
+
+### H3K27me3
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+
+PFC_ME_Low_Comp <- as.data.frame(matrix(PFC_ME_Low))
+VTA_ME_Low_Comp <- as.data.frame(matrix(VTA_ME_Low))
+STR_ME_Low_Comp <- as.data.frame(matrix(STR_ME_Low))
+HPP_ME_Low_Comp <- as.data.frame(matrix(HPP_ME_Low))
+CTX_ME_Low_Comp <- as.data.frame(matrix(CTX_ME_Low))
+
+PvV_ME_Low <- as.data.frame(matrix(PFC_ME_Low_Comp[PFC_ME_Low_Comp$V1 %in% VTA_ME_Low_Comp$V1, ]))
+PvC_ME_Low <- as.data.frame(matrix(PFC_ME_Low_Comp[PFC_ME_Low_Comp$V1 %in% CTX_ME_Low_Comp$V1, ]))
+PvS_ME_Low <- as.data.frame(matrix(PFC_ME_Low_Comp[PFC_ME_Low_Comp$V1 %in% HPP_ME_Low_Comp$V1, ]))
+PvH_ME_Low <- as.data.frame(matrix(PFC_ME_Low_Comp[PFC_ME_Low_Comp$V1 %in% STR_ME_Low_Comp$V1, ]))
+
+VvP_ME_Low <- as.data.frame(matrix(VTA_ME_Low_Comp[VTA_ME_Low_Comp$V1 %in% PFC_ME_Low_Comp$V1, ]))
+VvC_ME_Low <- as.data.frame(matrix(VTA_ME_Low_Comp[VTA_ME_Low_Comp$V1 %in% CTX_ME_Low_Comp$V1, ]))
+VvS_ME_Low <- as.data.frame(matrix(VTA_ME_Low_Comp[VTA_ME_Low_Comp$V1 %in% STR_ME_Low_Comp$V1, ]))
+VvH_ME_Low <- as.data.frame(matrix(VTA_ME_Low_Comp[VTA_ME_Low_Comp$V1 %in% HPP_ME_Low_Comp$V1, ]))
+
+SvP_ME_Low <- as.data.frame(matrix(STR_ME_Low_Comp[STR_ME_Low_Comp$V1 %in% PFC_ME_Low_Comp$V1, ]))
+SvC_ME_Low <- as.data.frame(matrix(STR_ME_Low_Comp[STR_ME_Low_Comp$V1 %in% CTX_ME_Low_Comp$V1, ]))
+SvV_ME_Low <- as.data.frame(matrix(STR_ME_Low_Comp[STR_ME_Low_Comp$V1 %in% VTA_ME_Low_Comp$V1, ]))
+SvH_ME_Low <- as.data.frame(matrix(STR_ME_Low_Comp[STR_ME_Low_Comp$V1 %in% HPP_ME_Low_Comp$V1, ]))
+
+HvP_ME_Low <- as.data.frame(matrix(HPP_ME_Low_Comp[HPP_ME_Low_Comp$V1 %in% PFC_ME_Low_Comp$V1, ]))
+HvC_ME_Low <- as.data.frame(matrix(HPP_ME_Low_Comp[HPP_ME_Low_Comp$V1 %in% CTX_ME_Low_Comp$V1, ]))
+HvV_ME_Low <- as.data.frame(matrix(HPP_ME_Low_Comp[HPP_ME_Low_Comp$V1 %in% VTA_ME_Low_Comp$V1, ]))
+HvS_ME_Low <- as.data.frame(matrix(HPP_ME_Low_Comp[HPP_ME_Low_Comp$V1 %in% STR_ME_Low_Comp$V1, ]))
+
+CvP_ME_Low <- as.data.frame(matrix(CTX_ME_Low_Comp[CTX_ME_Low_Comp$V1 %in% PFC_ME_Low_Comp$V1, ]))
+CvH_ME_Low <- as.data.frame(matrix(CTX_ME_Low_Comp[CTX_ME_Low_Comp$V1 %in% HPP_ME_Low_Comp$V1, ]))
+CvV_ME_Low <- as.data.frame(matrix(CTX_ME_Low_Comp[CTX_ME_Low_Comp$V1 %in% VTA_ME_Low_Comp$V1, ]))
+CvS_ME_Low <- as.data.frame(matrix(CTX_ME_Low_Comp[CTX_ME_Low_Comp$V1 %in% STR_ME_Low_Comp$V1, ]))
+
+
+PvAll_Int <- rbind(PvV_ME_Low,PvC_ME_Low,PvS_ME_Low, PvH_ME_Low)
+VvAll_Int <- rbind(VvP_ME_Low,VvC_ME_Low,VvS_ME_Low, VvH_ME_Low)
+SvAll_Int <- rbind(SvP_ME_Low,SvC_ME_Low,SvV_ME_Low, SvH_ME_Low)
+HvAll_Int <- rbind(HvP_ME_Low,HvC_ME_Low,HvV_ME_Low, HvS_ME_Low)
+CvAll_Int <- rbind(CvP_ME_Low,CvH_ME_Low,CvV_ME_Low, CvS_ME_Low)
+
+dup_rows <- duplicated(PvAll_Int$V1)
+PvAll_Int <- PvAll_Int[!dup_rows, ]
+PvAll_Final <- as.data.frame(matrix(PvAll_Int))
+PFC_ME_Low_Mat <- as.data.frame(matrix(PFC_ME_Low))
+
+
+dup_rows <- duplicated(VvAll_Int$V1)
+VvAll_Int <- VvAll_Int[!dup_rows, ]
+VvAll_Final <- as.data.frame(matrix(VvAll_Int))
+VTA_ME_Low_Mat <- as.data.frame(matrix(VTA_ME_Low))
+
+dup_rows <- duplicated(SvAll_Int$V1)
+SvAll_Int <- SvAll_Int[!dup_rows, ]
+SvAll_Final <- as.data.frame(matrix(SvAll_Int))
+STR_ME_Low_Mat <- as.data.frame(matrix(STR_ME_Low))
+
+dup_rows <- duplicated(HvAll_Int$V1)
+HvAll_Int <- HvAll_Int[!dup_rows, ]
+HvAll_Final <- as.data.frame(matrix(HvAll_Int))
+HPP_ME_Low_Mat <- as.data.frame(matrix(HPP_ME_Low))
+
+dup_rows <- duplicated(CvAll_Int$V1)
+CvAll_Int <- CvAll_Int[!dup_rows, ]
+CvAll_Final <- as.data.frame(matrix(CvAll_Int))
+CTX_ME_Low_Mat <- as.data.frame(matrix(CTX_ME_Low))
+
+
+PFC_ME_Low_Filt <- PFC_ME_Low_Mat[!PFC_ME_Low_Mat$V1 %in% PvAll_Final$V1, , drop = FALSE]
+VTA_ME_Low_Filt <- VTA_ME_Low_Mat[!VTA_ME_Low_Mat$V1 %in% VvAll_Final$V1, , drop = FALSE]
+STR_ME_Low_Filt <- STR_ME_Low_Mat[!STR_ME_Low_Mat$V1 %in% SvAll_Final$V1, , drop = FALSE]
+HPP_ME_Low_Filt <- HPP_ME_Low_Mat[!HPP_ME_Low_Mat$V1 %in% HvAll_Final$V1, , drop = FALSE]
+CTX_ME_Low_Filt <- CTX_ME_Low_Mat[!CTX_ME_Low_Mat$V1 %in% CvAll_Final$V1, , drop = FALSE]
+
+
+Overlapping_ME_Low_Filt <- as.matrix(c(length(PFC_ME_Low_Filt$V1), length(STR_ME_Low_Filt$V1), length(VTA_ME_Low_Filt$V1), length(HPP_ME_Low_Filt$V1), length(CTX_ME_Low_Filt$V1)))
+
+Overlapping_ME_Filt <- data.frame(ME_Low = Overlapping_ME_Low_Filt)
+
+rownames(Overlapping_ME_Filt) <- c("PFC","STR","VTA","HPP", "CTX")
+
+kableExtra::kable(Overlapping_ME_Filt)
+```
+
+### ALL
+```{r}
+
+Overlapping_ALL_df <- Overlapping_ALL
+Overlapping_ALL_df$OverlappingGenes_ME <- Overlapping_ALL_df$ME_Low
+Overlapping_ALL_df$OverlappingGenes_AC <- Overlapping_ALL_df$AC_High
+
+Overlapping_Filt_ALL <- data.frame(AC_High = Overlapping_AC_Filt_High, ME_Low = Overlapping_ME_Filt)
+
+Overlapping_Filt_ALL$Region <- c("PFC","STR","VTA","HPP", "CTX")
+
+dfm <- tidyr::pivot_longer(Overlapping_Filt_ALL, -Region ,names_to="MarkType", values_to = "NumberofGenes")
+
+
+Overlapping_Filt_ALL$OverlappingUniqueGenes_AC_High <- Overlapping_Filt_ALL$AC_High
+Overlapping_Filt_ALL$OverlappingUniqueGenes_ME_Low <- Overlapping_Filt_ALL$ME_Low
+
+Overlapping_Filt_ALL_Final <- Overlapping_Filt_ALL[, !names(Overlapping_Filt_ALL) %in% c("AC_High", "ME_Low")]
+
+Overlapping_ALL_df_Final <- Overlapping_ALL_df[, !names(Overlapping_ALL_df) %in% c("AC_High", "ME_Low")]
+
+Overlapping_ALL_df_Final$Region <- c("PFC","STR","VTA","HPP", "CTX")
+
+Overlapping_Filt_ALL_Final
+Overlapping_ALL_df_Final
+
+
+dfm1 <- tidyr::pivot_longer(Overlapping_Filt_ALL_Final, -Region ,names_to="MarkType")
+
+dfm2 <- tidyr::pivot_longer(Overlapping_ALL_df_Final, -Region ,names_to="MarkType")
+
+names(dfm1)[names(dfm1) == "value"] <- "OverlappingUniqueGenes"
+
+names(dfm2)[names(dfm2) == "value"] <- "OverlappingGenes"
+
+dfm1$MarkType[dfm1$MarkType == "OverlappingUniqueGenes_AC_High"] <- "H3K27ac"
+dfm1$MarkType[dfm1$MarkType == "OverlappingUniqueGenes_ME_Low"] <- "H3K27me3"
+
+dfm2$MarkType[dfm2$MarkType == "OverlappingGenes_AC"] <- "H3K27ac"
+dfm2$MarkType[dfm2$MarkType == "OverlappingGenes_ME"] <- "H3K27me3"
+
+print(dfm1)
+print(dfm2)
+
+df_combined <- dfm1 %>%
+  dplyr::inner_join(dfm2, by = c("Region", "MarkType")) %>%
+  mutate(
+    PercentUniqueness = sprintf("%.1f%%", 
+                                (OverlappingUniqueGenes / OverlappingGenes) * 100)
+  ) %>%
+  select(
+    Region,
+    MarkType,
+    OverlappingGenes,          
+    OverlappingUniqueGenes,
+    PercentUniqueness
+  ) %>%
+  arrange(MarkType)
+
+df_combined
+
+
+```
+
+# Session Info
+
+```{r Print Session Info, echo=TRUE, message=TRUE, warning=FALSE}
+sessionInfo()
+```

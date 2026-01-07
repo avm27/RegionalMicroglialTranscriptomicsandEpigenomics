@@ -1,0 +1,1209 @@
+---
+title: "Overlapping Gene Expression with Epigenetic Features"
+site: workflowr::wflow_site
+output:
+  workflowr::wflow_html:
+    toc: false
+editor_options:
+  chunk_output_type: console
+---
+
+# Microglial Transcriptional And Epigenetic Profiling -- Looking at Overlapping Genes
+
+All of these files stem either from the differential gene expression
+analysis in the RNA Sequencing data or the differential deposition
+analysis in the CATD data.
+
+```{r}
+
+#setwd("RegionalMicroglialTranscriptomicsandEpigenomics")
+
+library(conflicted)
+library(kableExtra)
+library(VennDiagram)
+library(grid)
+library(workflowr)
+library(ggplot2)
+library(dplyr) 
+library(stringr)
+library(ggplot2)
+conflicts_prefer(base::intersect)
+
+
+
+basepath="~/RegionalMicroglialTranscriptomicsandEpigenomics/"
+```
+
+## Correlating Significant Genes with Genes known to be regulated by H3K27me3
+
+### Read in and filter necessary files
+
+```{r H3K37me3 Correlations with Signficantly Downregulated Genes Reading in Files}
+PFCvsVTArna <- read.csv(paste0(basepath, "output/RNASeq_DEGs/Results_Sig_CSVs/Sig_Res_DEGs_PFC_vs_VTA.csv"), header = TRUE)
+## Subset for Highly Significant Results (adjp < 0.05)
+PFCvsVTArnaSig <- subset(PFCvsVTArna, padj < 0.05)
+## Subset for Downregulated Genes (L2FC < 0)
+PFCvsVTArnaDown <- subset(PFCvsVTArnaSig, log2FoldChange < 0)
+
+PFCvsVTAcatd <- read.csv(paste0(basepath,"output/CATD_DEPGs/H3K27me3/Sig_Res_DEPGs_K27me3_PFC_vs_VTA.csv"), header = TRUE)
+## Subset for Highly Significant Results (adjp < 0.05)
+PFCvsVTAcatdSig <- subset(PFCvsVTAcatd, padj < 0.05)
+## Subset for Downregulated Genes (L2FC < 0)
+PFCvsVTAcatdSigUp <- subset(PFCvsVTAcatdSig, log2FoldChange > 0)
+
+HPPvsSTRrna <- read.csv(paste0(basepath,"output/RNASeq_DEGs/Results_Sig_CSVs/Sig_Res_DEGs_HPP_vs_STR.csv"), header = TRUE)
+## Subset for Highly Significant Results (adjp < 0.05)
+HPPvsSTRrnaSig <- subset(HPPvsSTRrna, padj < 0.05)
+## Subset for Downregulated Genes (L2FC < 0)
+HPPvsSTRrnaDown <- subset(HPPvsSTRrnaSig, log2FoldChange < 0)
+
+HPPvsSTRcatd <- read.csv(paste0(basepath,"output/CATD_DEPGs/H3K27me3/Sig_Res_DEPGs_K27me3_HPP_vs_STR.csv"), header = TRUE)
+## Subset for Highly Significant Results (adjp < 0.05)
+HPPvsSTRcatdSig <- subset(HPPvsSTRcatd, padj < 0.05)
+## Subset for Downregulated Genes (L2FC < 0)
+HPPvsSTRcatdSigUp <- subset(HPPvsSTRcatdSig, log2FoldChange > 0)
+
+STRvsVTArna <- read.csv(paste0(basepath,"output/RNASeq_DEGs/Results_Sig_CSVs/Sig_Res_DEGs_STR_vs_VTA.csv"), header = TRUE)
+## Subset for Highly Significant Results (adjp < 0.05)
+STRvsVTArnaSig <- subset(STRvsVTArna, padj < 0.05)
+## Subset for Downregulated Genes (L2FC < 0)
+STRvsVTArnaDown <- subset(STRvsVTArnaSig, log2FoldChange < 0)
+
+STRvsVTAcatd <- read.csv(paste0(basepath,"output/CATD_DEPGs/H3K27me3/Sig_Res_DEPGs_K27me3_STR_vs_VTA.csv"), header = TRUE)
+## Subset for Highly Significant Results (adjp < 0.05)
+STRvsVTAcatdSig <- subset(STRvsVTAcatd, padj < 0.05)
+## Subset for Downregulated Genes (L2FC < 0)
+STRvsVTAcatdSigUp <- subset(STRvsVTAcatdSig, log2FoldChange > 0)
+
+HPPvsCTXrna <- read.csv(paste0(basepath,"output/RNASeq_DEGs/Results_Sig_CSVs/Sig_Res_DEGs_HPP_vs_Cortex.csv"), header = TRUE)
+## Subset for Highly Significant Results (adjp < 0.05)
+HPPvsCTXrnaSig <- subset(HPPvsCTXrna, padj < 0.05)
+## Subset for Downregulated Genes (L2FC < 0)
+HPPvsCTXrnaDown <- subset(HPPvsCTXrnaSig, log2FoldChange < 0)
+
+HPPvsCTXcatd <- read.csv(paste0(basepath,"output/CATD_DEPGs/H3K27me3/Sig_Res_DEPGs_K27me3_HPP_vs_CTX.csv"), header = TRUE)
+## Subset for Highly Significant Results (adjp < 0.05)
+HPPvsCTXcatdSig <- subset(HPPvsCTXcatd, padj < 0.05)
+## Subset for Downregulated Genes (L2FC < 0)
+HPPvsCTXcatdSigUp <- subset(HPPvsCTXcatdSig, log2FoldChange > 0)
+
+PFCvsCTXrna <- read.csv(paste0(basepath,"output/RNASeq_DEGs/Results_Sig_CSVs/Sig_Res_DEGs_PFC_vs_Cortex.csv"), header = TRUE)
+## Subset for Highly Significant Results (adjp < 0.05)
+PFCvsCTXrnaSig <- subset(PFCvsCTXrna, padj < 0.05)
+## Subset for Downregulated Genes (L2FC < 0)
+PFCvsCTXrnaDown <- subset(PFCvsCTXrnaSig, log2FoldChange < 0)
+
+#PFCvsCTXcatd <- read.csv(paste0(basepath,"output/CATD_DEPGs/H3K27me3/Sig_Res_DEPGs_K27me3_PFC_vs_CTX.csv"), header = TRUE)
+## Subset for Highly Significant Results (adjp < 0.05)
+#PFCvsCTXcatdSig <- subset(PFCvsCTXcatd, padj < 0.05)
+## Subset for Downregulated Genes (L2FC < 0)
+#PFCvsCTXcatdSigUp <- subset(PFCvsCTXcatdSig, log2FoldChange > 0)
+
+STRvsPFCrna <- read.csv(paste0(basepath,"output/RNASeq_DEGs/Results_Sig_CSVs/Sig_Res_DEGs_STR_vs_PFC.csv"), header = TRUE)
+## Subset for Highly Significant Results (adjp < 0.05)
+STRvsPFCrnaSig <- subset(STRvsPFCrna, padj < 0.05)
+## Subset for Downregulated Genes (L2FC < 0)
+STRvsPFCrnaDown <- subset(STRvsPFCrnaSig, log2FoldChange < 0)
+
+STRvsPFCcatd <- read.csv(paste0(basepath,"output/CATD_DEPGs/H3K27me3/Sig_Res_DEPGs_K27me3_STR_vs_PFC.csv"), header = TRUE)
+## Subset for Highly Significant Results (adjp < 0.05)
+STRvsPFCcatdSig <- subset(STRvsPFCcatd, padj < 0.05)
+## Subset for Downregulated Genes (L2FC < 0)
+STRvsPFCcatdSigUp <- subset(STRvsPFCcatdSig, log2FoldChange > 0)
+
+STRvsCTXrna <- read.csv(paste0(basepath,"output/RNASeq_DEGs/Results_Sig_CSVs/Sig_Res_DEGs_STR_vs_Cortex.csv"), header = TRUE)
+## Subset for Highly Significant Results (adjp < 0.05)
+STRvsCTXrnaSig <- subset(STRvsCTXrna, padj < 0.05)
+## Subset for Downregulated Genes (L2FC < 0)
+STRvsCTXrnaDown <- subset(STRvsCTXrnaSig, log2FoldChange < 0)
+
+STRvsCTXcatd <- read.csv(paste0(basepath,"output/CATD_DEPGs/H3K27me3/Sig_Res_DEPGs_K27me3_STR_vs_CTX.csv"), header = TRUE)
+## Subset for Highly Significant Results (adjp < 0.05)
+STRvsCTXcatdSig <- subset(STRvsCTXcatd, padj < 0.05)
+## Subset for Downregulated Genes (L2FC < 0)
+STRvsCTXcatdSigUp <- subset(STRvsCTXcatdSig, log2FoldChange > 0)
+
+HPPvsVTArna <- read.csv(paste0(basepath,"output/RNASeq_DEGs/Results_Sig_CSVs/Sig_Res_DEGs_HPP_vs_VTA.csv"), header = TRUE)
+## Subset for Highly Significant Results (adjp < 0.05)
+HPPvsVTArnaSig <- subset(HPPvsVTArna, padj < 0.05)
+## Subset for Downregulated Genes (L2FC < 0)
+HPPvsVTArnaDown <- subset(HPPvsVTArnaSig, log2FoldChange < 0)
+
+HPPvsVTAcatd <- read.csv(paste0(basepath,"output/CATD_DEPGs/H3K27me3/Sig_Res_DEPGs_K27me3_HPP_vs_VTA.csv"), header = TRUE)
+## Subset for Highly Significant Results (adjp < 0.05)
+HPPvsVTAcatdSig <- subset(HPPvsVTAcatd, padj < 0.05)
+## Subset for Downregulated Genes (L2FC < 0)
+HPPvsVTAcatdSigUp <- subset(HPPvsVTAcatdSig, log2FoldChange > 0)
+
+CTXvsVTArna <- read.csv(paste0(basepath,"output/RNASeq_DEGs/Results_Sig_CSVs/Sig_Res_DEGs_CTX_vs_VTA.csv"), header = TRUE)
+## Subset for Highly Significant Results (adjp < 0.05)
+CTXvsVTArnaSig <- subset(CTXvsVTArna, padj < 0.05)
+## Subset for Downregulated Genes (L2FC < 0)
+CTXvsVTArnaDown <- subset(CTXvsVTArnaSig, log2FoldChange < 0)
+
+CTXvsVTAcatd <- read.csv(paste0(basepath,"output/CATD_DEPGs/H3K27me3/Sig_Res_DEPGs_K27me3_CTX_vs_VTA.csv"), header = TRUE)
+## Subset for Highly Significant Results (adjp < 0.05)
+CTXvsVTAcatdSig <- subset(CTXvsVTAcatd, padj < 0.05)
+## Subset for Downregulated Genes (L2FC < 0)
+CTXvsVTAcatdSigUp <- subset(CTXvsVTAcatdSig, log2FoldChange > 0)
+
+HPPvsPFCrna <- read.csv(paste0(basepath,"output/RNASeq_DEGs/Results_Sig_CSVs/Sig_Res_DEGs_HPP_vs_PFC.csv"), header = TRUE)
+## Subset for Highly Significant Results (adjp < 0.05)
+HPPvsPFCrnaSig <- subset(HPPvsPFCrna, padj < 0.05)
+## Subset for Downregulated Genes (L2FC < 0)
+HPPvsPFCrnaDown <- subset(HPPvsPFCrnaSig, log2FoldChange < 0)
+
+HPPvsPFCcatd <- read.csv(paste0(basepath,"output/CATD_DEPGs/H3K27me3/Sig_Res_DEPGs_K27me3_HPP_vs_PFC.csv"), header = TRUE)
+## Subset for Highly Significant Results (adjp < 0.05)
+HPPvsPFCcatdSig <- subset(HPPvsPFCcatd, padj < 0.05)
+## Subset for Downregulated Genes (L2FC < 0)
+HPPvsPFCcatdSigUp <- subset(HPPvsPFCcatdSig, log2FoldChange > 0)
+
+```
+
+### Check and Print All Overlaps based on Comparison for K27me3 {.tabset}
+
+#### PFC vs VTA
+
+```{r}
+
+common_K27me3_PFCvsVTA <- intersect(PFCvsVTArnaDown$symbol, PFCvsVTAcatdSigUp$symbol)
+kbl(common_K27me3_PFCvsVTA, col.names = "Genes Overlapping") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+
+a=length(PFCvsVTArnaDown$symbol)
+b=length(PFCvsVTAcatdSigUp$symbol)
+c=length(common_K27me3_PFCvsVTA)
+
+RNA=a-c
+CATD=b-c
+COMMON=c
+
+knitr::kables(
+  list(
+    knitr::kable(RNA, "rst", col.names = "DEGs Downregulated"),
+    knitr::kable(COMMON, "rst", col.names = "Overlaps DEGs + DEPGs"),
+    knitr::kable(CATD, "rst", col.names = "DEPGs Upregulated"))
+)
+
+```
+
+#### HPP vs STR
+
+```{r echo=TRUE}
+
+common_K27me3_HPPvsSTR <- intersect(HPPvsSTRrnaDown$symbol, HPPvsSTRcatdSigUp$symbol)
+knitr::kable(common_K27me3_HPPvsSTR, "rst", col.names = "Genes Overlapping") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+
+a=length(HPPvsSTRrnaDown$symbol)
+b=length(HPPvsSTRcatdSigUp$symbol)
+c=length(common_K27me3_HPPvsSTR)
+
+RNA=a-c
+CATD=b-c
+COMMON=c
+
+knitr::kables(
+  list(
+    knitr::kable(RNA, "rst", col.names = "DEGs Downregulated"),
+    knitr::kable(COMMON, "rst", col.names = "Overlaps DEGs + DEPGs"),
+    knitr::kable(CATD, "rst", col.names = "DEPGs Upregulated"))
+)
+```
+
+#### STR vs VTA
+
+```{r}
+common_K27me3_STRvsVTA <- intersect(STRvsVTArnaDown$symbol, STRvsVTAcatdSigUp$symbol)
+knitr::kable(common_K27me3_STRvsVTA, "rst", col.names = "Genes Overlapping") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+
+a=length(STRvsVTArnaDown$symbol)
+b=length(STRvsVTAcatdSigUp$symbol)
+c=length(common_K27me3_STRvsVTA)
+
+RNA=a-c
+CATD=b-c
+COMMON=c
+
+knitr::kables(
+  list(
+    knitr::kable(RNA, "rst", col.names = "DEGs Downregulated"),
+    knitr::kable(COMMON, "rst", col.names = "Overlaps DEGs + DEPGs"),
+    knitr::kable(CATD, "rst", col.names = "DEPGs Upregulated"))
+)
+```
+
+#### HPP vs CTX
+
+```{r}
+common_K27me3_HPPvsCTX <- intersect(HPPvsCTXrnaDown$symbol, HPPvsCTXcatdSigUp$symbol)
+knitr::kable(common_K27me3_HPPvsCTX, "rst", col.names = "Genes Overlapping") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+
+a=length(HPPvsCTXrnaDown$symbol)
+b=length(HPPvsCTXcatdSigUp$symbol)
+c=length(common_K27me3_HPPvsCTX)
+
+RNA=a-c
+CATD=b-c
+COMMON=c
+
+knitr::kables(
+  list(
+    knitr::kable(RNA, "rst", col.names = "DEGs Downregulated"),
+    knitr::kable(COMMON, "rst", col.names = "Overlaps DEGs + DEPGs"),
+    knitr::kable(CATD, "rst", col.names = "DEPGs Upregulated"))
+)
+```
+
+#### PFC vs CTX
+
+```{r}
+#common_K27me3_PFCvsCTX <- intersect(PFCvsCTXrnaDown$symbol, PFCvsCTXcatdSigUp$symbol)
+#knitr::kable(common_K27me3_PFCvsCTX, "rst", col.names = "Genes Overlapping") %>%
+#  kable_styling(bootstrap_options = c("striped", "hover"))
+
+
+#a=length(PFCvsCTXrnaDown$symbol)
+#b=length(PFCvsCTXcatdSigUp$symbol)
+#c=length(common_K27me3_PFCvsCTX)
+
+#RNA=a-c
+#CATD=b-c
+#COMMON=c
+
+#knitr::kables(
+#  list(
+#    knitr::kable(RNA, "rst", col.names = "DEGs Downregulated"),
+#    knitr::kable(COMMON, "rst", col.names = "Overlaps DEGs + DEPGs"),
+#    knitr::kable(CATD, "rst", col.names = "DEPGs Upregulated"))
+#)
+```
+
+#### STR vs PFC
+
+```{r}
+common_K27me3_STRvsPFC <- intersect(STRvsPFCrnaDown$symbol, STRvsPFCcatdSigUp$symbol)
+knitr::kable(common_K27me3_STRvsPFC, "rst", col.names = "Genes Overlapping") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+
+a=length(STRvsPFCrnaDown$symbol)
+b=length(STRvsPFCcatdSigUp$symbol)
+c=length(common_K27me3_STRvsPFC)
+
+RNA=a-c
+CATD=b-c
+COMMON=c
+
+knitr::kables(
+  list(
+    knitr::kable(RNA, "rst", col.names = "DEGs Downregulated"),
+    knitr::kable(COMMON, "rst", col.names = "Overlaps DEGs + DEPGs"),
+    knitr::kable(CATD, "rst", col.names = "DEPGs Upregulated"))
+)
+
+```
+
+#### STR vs CTX
+
+```{r}
+common_K27me3_STRvsCTX <- intersect(STRvsCTXrnaDown$symbol, STRvsCTXcatdSigUp$symbol)
+knitr::kable(common_K27me3_STRvsCTX, "rst", col.names = "Genes Overlapping") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+
+a=length(STRvsCTXrnaDown$symbol)
+b=length(STRvsCTXcatdSigUp$symbol)
+c=length(common_K27me3_STRvsCTX)
+
+RNA=a-c
+CATD=b-c
+COMMON=c
+
+knitr::kables(
+  list(
+    knitr::kable(RNA, "rst", col.names = "DEGs Downregulated"),
+    knitr::kable(COMMON, "rst", col.names = "Overlaps DEGs + DEPGs"),
+    knitr::kable(CATD, "rst", col.names = "DEPGs Upregulated"))
+)
+
+```
+
+#### HPP vs VTA
+
+```{r}
+common_K27me3_HPPvsVTA <- intersect(HPPvsVTArnaDown$symbol, HPPvsVTAcatdSigUp$symbol)
+knitr::kable(common_K27me3_HPPvsVTA, "rst", col.names = "Genes Overlapping") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+
+a=length(HPPvsVTArnaDown$symbol)
+b=length(HPPvsVTAcatdSigUp$symbol)
+c=length(common_K27me3_HPPvsVTA)
+
+RNA=a-c
+CATD=b-c
+COMMON=c
+
+knitr::kables(
+  list(
+    knitr::kable(RNA, "rst", col.names = "DEGs Downregulated"),
+    knitr::kable(COMMON, "rst", col.names = "Overlaps DEGs + DEPGs"),
+    knitr::kable(CATD, "rst", col.names = "DEPGs Upregulated"))
+)
+```
+
+#### CTX vs VTA
+
+```{r}
+common_K27me3_CTXvsVTA <- intersect(CTXvsVTArnaDown$symbol, CTXvsVTAcatdSigUp$symbol)
+knitr::kable(common_K27me3_CTXvsVTA, "rst", col.names = "Genes Overlapping") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+
+a=length(CTXvsVTArnaDown$symbol)
+b=length(CTXvsVTAcatdSigUp$symbol)
+c=length(common_K27me3_CTXvsVTA)
+
+RNA=a-c
+CATD=b-c
+COMMON=c
+
+knitr::kables(
+  list(
+    knitr::kable(RNA, "rst", col.names = "DEGs Downregulated"),
+    knitr::kable(COMMON, "rst", col.names = "Overlaps DEGs + DEPGs"),
+    knitr::kable(CATD, "rst", col.names = "DEPGs Upregulated"))
+)
+
+```
+
+#### HPP vs PFC
+
+```{r}
+common_K27me3_HPPvsPFC <- intersect(HPPvsPFCrnaDown$symbol, HPPvsPFCcatdSigUp$symbol)
+knitr::kable(common_K27me3_HPPvsPFC, "rst", col.names = "Genes Overlapping") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+
+a=length(HPPvsPFCrnaDown$symbol)
+b=length(HPPvsPFCcatdSigUp$symbol)
+c=length(common_K27me3_HPPvsPFC)
+
+RNA=a-c
+CATD=b-c
+COMMON=c
+
+knitr::kables(
+  list(
+    knitr::kable(RNA, "rst", col.names = "DEGs Downregulated"),
+    knitr::kable(COMMON, "rst", col.names = "Overlaps DEGs + DEPGs"),
+    knitr::kable(CATD, "rst", col.names = "DEPGs Upregulated"))
+)
+
+```
+
+### Generate background lists for GO testing based on all significant results, regardless of overlaps for H3K27me3
+
+```{r}
+
+merged_data1 <- merge(PFCvsVTArnaSig, PFCvsVTAcatdSig, all = TRUE)
+merged_data2 <- merge(HPPvsSTRrnaSig, HPPvsSTRcatdSig, all = TRUE)
+merged_data3 <- merge(STRvsVTArnaSig, STRvsVTAcatdSig, all = TRUE)
+merged_data4 <- merge(HPPvsCTXrnaSig, HPPvsCTXcatdSig, all = TRUE)
+#merged_data5 <- merge(PFCvsCTXrnaSig, PFCvsCTXcatdSig, all = TRUE)
+merged_data6 <- merge(STRvsPFCrnaSig, STRvsPFCcatdSig, all = TRUE)
+merged_data7 <- merge(STRvsCTXrnaSig, STRvsCTXcatdSig, all = TRUE)
+merged_data8 <- merge(HPPvsVTArnaSig, HPPvsVTAcatdSig, all = TRUE)
+merged_data9 <- merge(CTXvsVTArnaSig, CTXvsVTAcatdSig, all = TRUE)
+merged_data10 <- merge(HPPvsPFCrnaSig, HPPvsPFCcatdSig, all = TRUE)
+
+merged_data11 <- merge(merged_data1, merged_data2, all = TRUE)
+merged_data12 <- merge(merged_data11, merged_data3, all = TRUE)
+merged_data13 <- merge(merged_data12, merged_data4, all = TRUE)
+merged_data14 <- merged_data13 #merged_data5, all = TRUE)
+merged_data15 <- merge(merged_data14, merged_data6, all = TRUE)
+merged_data16 <- merge(merged_data15, merged_data7, all = TRUE)
+merged_data17 <- merge(merged_data16, merged_data8, all = TRUE)
+merged_data18 <- merge(merged_data17, merged_data9, all = TRUE)
+merged_data19 <- merge(merged_data18, merged_data10, all = TRUE)
+
+
+sum(is.na(merged_data19$entrez))
+sum(duplicated(merged_data19$entrez))
+length(rownames(merged_data19))
+
+dup_rows <- duplicated(merged_data19$entrez)
+merged_data_nodup <- merged_data19[!dup_rows, ]
+na_rows <- is.na(merged_data_nodup$entrez)
+merged_data_nodup_noNA <- merged_data_nodup[!na_rows, ]
+
+sum(is.na(merged_data_nodup_noNA$entrez))
+sum(duplicated(merged_data_nodup_noNA$entrez))
+length(rownames(merged_data_nodup_noNA))
+
+gene_matrix_background_K27me3 <- merged_data_nodup_noNA$entrez
+
+```
+
+## Correlating Significant Genes with Genes known to be regulated by H3K27ac
+### Read in and filter necessary files
+
+```{r}
+PFCvsVTArna <- read.csv(paste0(basepath, "output/RNASeq_DEGs/Results_Sig_CSVs/Sig_Res_DEGs_PFC_vs_VTA.csv"), header = TRUE)
+## Subset for Highly Significant Results (adjp < 0.05)
+PFCvsVTArnaSig <- subset(PFCvsVTArna, padj < 0.05)
+## Subset for Downregulated Genes (L2FC < 0)
+PFCvsVTArnaSigUp <- subset(PFCvsVTArnaSig, log2FoldChange > 0)
+
+PFCvsVTAcatd <- read.csv(paste0(basepath,"output/CATD_DEPGs/H3K27ac/Sig_Res_DEPGs_K27ac_PFC_vs_VTA.csv"), header = TRUE)
+## Subset for Highly Significant Results (adjp < 0.05)
+PFCvsVTAcatdSig <- subset(PFCvsVTAcatd, padj < 0.05)
+## Subset for Downregulated Genes (L2FC < 0)
+PFCvsVTAcatdSigUp <- subset(PFCvsVTAcatdSig, log2FoldChange > 0)
+
+HPPvsSTRrna <- read.csv(paste0(basepath,"output/RNASeq_DEGs/Results_Sig_CSVs/Sig_Res_DEGs_HPP_vs_STR.csv"), header = TRUE)
+## Subset for Highly Significant Results (adjp < 0.05)
+HPPvsSTRrnaSig <- subset(HPPvsSTRrna, padj < 0.05)
+## Subset for Downregulated Genes (L2FC < 0)
+HPPvsSTRrnaSigUp <- subset(HPPvsSTRrnaSig, log2FoldChange > 0)
+
+HPPvsSTRcatd <- read.csv(paste0(basepath,"output/CATD_DEPGs/H3K27ac/Sig_Res_DEPGs_K27ac_HPP_vs_STR.csv"), header = TRUE)
+## Subset for Highly Significant Results (adjp < 0.05)
+HPPvsSTRcatdSig <- subset(HPPvsSTRcatd, padj < 0.05)
+## Subset for Downregulated Genes (L2FC < 0)
+HPPvsSTRcatdSigUp <- subset(HPPvsSTRcatdSig, log2FoldChange > 0)
+
+STRvsVTArna <- read.csv(paste0(basepath,"output/RNASeq_DEGs/Results_Sig_CSVs/Sig_Res_DEGs_STR_vs_VTA.csv"), header = TRUE)
+## Subset for Highly Significant Results (adjp < 0.05)
+STRvsVTArnaSig <- subset(STRvsVTArna, padj < 0.05)
+## Subset for Downregulated Genes (L2FC < 0)
+STRvsVTArnaSigUp <- subset(STRvsVTArnaSig, log2FoldChange > 0)
+
+STRvsVTAcatd <- read.csv(paste0(basepath,"output/CATD_DEPGs/H3K27ac/Sig_Res_DEPGs_K27ac_STR_vs_VTA.csv"), header = TRUE)
+## Subset for Highly Significant Results (adjp < 0.05)
+STRvsVTAcatdSig <- subset(STRvsVTAcatd, padj < 0.05)
+## Subset for Downregulated Genes (L2FC < 0)
+STRvsVTAcatdSigUp <- subset(STRvsVTAcatdSig, log2FoldChange > 0)
+
+HPPvsCTXrna <- read.csv(paste0(basepath,"output/RNASeq_DEGs/Results_Sig_CSVs/Sig_Res_DEGs_HPP_vs_Cortex.csv"), header = TRUE)
+## Subset for Highly Significant Results (adjp < 0.05)
+HPPvsCTXrnaSig <- subset(HPPvsCTXrna, padj < 0.05)
+## Subset for Downregulated Genes (L2FC < 0)
+HPPvsCTXrnaSigUp <- subset(HPPvsCTXrnaSig, log2FoldChange > 0)
+
+HPPvsCTXcatd <- read.csv(paste0(basepath,"output/CATD_DEPGs/H3K27ac/Sig_Res_DEPGs_K27ac_HPP_vs_CTX.csv"), header = TRUE)
+## Subset for Highly Significant Results (adjp < 0.05)
+HPPvsCTXcatdSig <- subset(HPPvsCTXcatd, padj < 0.05)
+## Subset for Downregulated Genes (L2FC < 0)
+HPPvsCTXcatdSigUp <- subset(HPPvsCTXcatdSig, log2FoldChange > 0)
+
+PFCvsCTXrna <- read.csv(paste0(basepath,"output/RNASeq_DEGs/Results_Sig_CSVs/Sig_Res_DEGs_PFC_vs_Cortex.csv"), header = TRUE)
+## Subset for Highly Significant Results (adjp < 0.05)
+PFCvsCTXrnaSig <- subset(PFCvsCTXrna, padj < 0.05)
+## Subset for Downregulated Genes (L2FC < 0)
+PFCvsCTXrnaSigUp <- subset(PFCvsCTXrnaSig, log2FoldChange > 0)
+
+PFCvsCTXcatd <- read.csv(paste0(basepath,"output/CATD_DEPGs/H3K27ac/Sig_Res_DEPGs_K27ac_PFC_vs_CTX.csv"), header = TRUE)
+## Subset for Highly Significant Results (adjp < 0.05)
+PFCvsCTXcatdSig <- subset(PFCvsCTXcatd, padj < 0.05)
+## Subset for Downregulated Genes (L2FC < 0)
+PFCvsCTXcatdSigUp <- subset(PFCvsCTXcatdSig, log2FoldChange > 0)
+
+STRvsPFCrna <-  read.csv(paste0(basepath,"output/RNASeq_DEGs/Results_Sig_CSVs/Sig_Res_DEGs_STR_vs_PFC.csv"), header = TRUE)
+## Subset for Highly Significant Results (adjp < 0.05)
+STRvsPFCrnaSig <- subset(STRvsPFCrna, padj < 0.05)
+## Subset for Downregulated Genes (L2FC < 0)
+STRvsPFCrnaSigUp <- subset(STRvsPFCrnaSig, log2FoldChange > 0)
+
+STRvsPFCcatd <- read.csv(paste0(basepath,"output/CATD_DEPGs/H3K27ac/Sig_Res_DEPGs_K27ac_STR_vs_PFC.csv"), header = TRUE)
+## Subset for Highly Significant Results (adjp < 0.05)
+STRvsPFCcatdSig <- subset(STRvsPFCcatd, padj < 0.05)
+## Subset for Downregulated Genes (L2FC < 0)
+STRvsPFCcatdSigUp <- subset(STRvsPFCcatdSig, log2FoldChange > 0)
+
+STRvsCTXrna <- read.csv(paste0(basepath,"output/RNASeq_DEGs/Results_Sig_CSVs/Sig_Res_DEGs_STR_vs_Cortex.csv"), header = TRUE)
+## Subset for Highly Significant Results (adjp < 0.05)
+STRvsCTXrnaSig <- subset(STRvsCTXrna, padj < 0.05)
+## Subset for Downregulated Genes (L2FC < 0)
+STRvsCTXrnaSigUp <- subset(STRvsCTXrnaSig, log2FoldChange > 0)
+
+STRvsCTXcatd <- read.csv(paste0(basepath,"output/CATD_DEPGs/H3K27ac/Sig_Res_DEPGs_K27ac_STR_vs_CTX.csv"), header = TRUE)
+## Subset for Highly Significant Results (adjp < 0.05)
+STRvsCTXcatdSig <- subset(STRvsCTXcatd, padj < 0.05)
+## Subset for Downregulated Genes (L2FC < 0)
+STRvsCTXcatdSigUp <- subset(STRvsCTXcatdSig, log2FoldChange > 0)
+
+HPPvsVTArna <- read.csv(paste0(basepath,"output/RNASeq_DEGs/Results_Sig_CSVs/Sig_Res_DEGs_HPP_vs_VTA.csv"), header = TRUE)
+## Subset for Highly Significant Results (adjp < 0.05)
+HPPvsVTArnaSig <- subset(HPPvsVTArna, padj < 0.05)
+## Subset for Downregulated Genes (L2FC < 0)
+HPPvsVTArnaSigUp <- subset(HPPvsVTArnaSig, log2FoldChange > 0)
+
+HPPvsVTAcatd <- read.csv(paste0(basepath,"output/CATD_DEPGs/H3K27ac/Sig_Res_DEPGs_K27ac_HPP_vs_VTA.csv"), header = TRUE)
+## Subset for Highly Significant Results (adjp < 0.05)
+HPPvsVTAcatdSig <- subset(HPPvsVTAcatd, padj < 0.05)
+## Subset for Downregulated Genes (L2FC < 0)
+HPPvsVTAcatdSigUp <- subset(HPPvsVTAcatdSig, log2FoldChange > 0)
+
+CTXvsVTArna <- read.csv(paste0(basepath,"output/RNASeq_DEGs/Results_Sig_CSVs/Sig_Res_DEGs_CTX_vs_VTA.csv"), header = TRUE)
+## Subset for Highly Significant Results (adjp < 0.05)
+CTXvsVTArnaSig <- subset(CTXvsVTArna, padj < 0.05)
+## Subset for Downregulated Genes (L2FC < 0)
+CTXvsVTArnaSigUp <- subset(CTXvsVTArnaSig, log2FoldChange > 0)
+
+CTXvsVTAcatd <- read.csv(paste0(basepath,"output/CATD_DEPGs/H3K27ac/Sig_Res_DEPGs_K27ac_CTX_vs_VTA.csv"), header = TRUE)
+## Subset for Highly Significant Results (adjp < 0.05)
+CTXvsVTAcatdSig <- subset(CTXvsVTAcatd, padj < 0.05)
+## Subset for Downregulated Genes (L2FC < 0)
+CTXvsVTAcatdSigUp <- subset(CTXvsVTAcatdSig, log2FoldChange > 0)
+
+HPPvsPFCrna <- read.csv(paste0(basepath,"output/RNASeq_DEGs/Results_Sig_CSVs/Sig_Res_DEGs_HPP_vs_PFC.csv"), header = TRUE)
+## Subset for Highly Significant Results (adjp < 0.05)
+HPPvsPFCrnaSig <- subset(HPPvsPFCrna, padj < 0.05)
+## Subset for Downregulated Genes (L2FC < 0)
+HPPvsPFCrnaSigUp <- subset(HPPvsPFCrnaSig, log2FoldChange > 0)
+
+HPPvsPFCcatd <- read.csv(paste0(basepath,"output/CATD_DEPGs/H3K27ac/Sig_Res_DEPGs_K27ac_HPP_vs_PFC.csv"), header = TRUE)
+## Subset for Highly Significant Results (adjp < 0.05)
+HPPvsPFCcatdSig <- subset(HPPvsPFCcatd, padj < 0.05)
+## Subset for Downregulated Genes (L2FC < 0)
+HPPvsPFCcatdSigUp <- subset(HPPvsPFCcatdSig, log2FoldChange > 0)
+
+
+```
+
+
+### Check and Print All Overlaps based on Comparison for K27ac {.tabset}
+
+#### PFC vs VTA
+
+```{r echo=TRUE, paged.print=TRUE}
+common_K27ac_PFCvsVTA <- intersect(PFCvsVTArnaSigUp$symbol, PFCvsVTAcatdSigUp$symbol)
+knitr::kable(common_K27ac_PFCvsVTA, "rst", col.names = "Genes Overlapping") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+
+a=length(PFCvsVTArnaSigUp$symbol)
+b=length(PFCvsVTAcatdSigUp$symbol)
+c=length(common_K27ac_PFCvsVTA)
+
+RNA=a-c
+CATD=b-c
+COMMON=c
+
+knitr::kables(
+  list(
+    knitr::kable(RNA, "rst", col.names = "DEGs Upregulated"),
+    knitr::kable(COMMON, "rst", col.names = "Overlaps DEGs + DEPGs"),
+    knitr::kable(CATD, "rst", col.names = "DEPGs Upregulated"))
+)
+
+```
+
+#### HPP vs STR
+
+```{r}
+common_K27ac_HPPvsSTR <- intersect(HPPvsSTRrnaSigUp$symbol, HPPvsSTRcatdSigUp$symbol)
+knitr::kable(common_K27ac_HPPvsSTR, "rst", col.names = "Genes Overlapping") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+
+a=length(HPPvsSTRrnaSigUp$symbol)
+b=length(HPPvsSTRcatdSigUp$symbol)
+c=length(common_K27ac_HPPvsSTR)
+
+
+RNA=a-c
+CATD=b-c
+COMMON=c
+
+knitr::kables(
+  list(
+    knitr::kable(RNA, "rst", col.names = "DEGs Upregulated"),
+    knitr::kable(COMMON, "rst", col.names = "Overlaps DEGs + DEPGs"),
+    knitr::kable(CATD, "rst", col.names = "DEPGs Upregulated"))
+)
+```
+
+#### STR vs VTA
+
+```{r}
+common_K27ac_STRvsVTA <- intersect(STRvsVTArnaSigUp$symbol, STRvsVTAcatdSigUp$symbol)
+knitr::kable(common_K27ac_STRvsVTA, "rst", col.names = "Genes Overlapping") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+
+a=length(STRvsVTArnaSigUp$symbol)
+b=length(STRvsVTAcatdSigUp$symbol)
+c=length(common_K27ac_STRvsVTA)
+
+
+RNA=a-c
+CATD=b-c
+COMMON=c
+
+knitr::kables(
+  list(
+    knitr::kable(RNA, "rst", col.names = "DEGs Upregulated"),
+    knitr::kable(COMMON, "rst", col.names = "Overlaps DEGs + DEPGs"),
+    knitr::kable(CATD, "rst", col.names = "DEPGs Upregulated"))
+)
+```
+
+#### HPP vs CTX
+
+```{r}
+common_K27ac_HPPvsCTX <- intersect(HPPvsCTXrnaSigUp$symbol, HPPvsCTXcatdSigUp$symbol)
+knitr::kable(common_K27ac_HPPvsCTX, "rst", col.names = "Genes Overlapping") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+
+a=length(HPPvsCTXrnaSigUp$symbol)
+b=length(HPPvsCTXcatdSigUp$symbol)
+c=length(common_K27ac_HPPvsCTX)
+
+
+RNA=a-c
+CATD=b-c
+COMMON=c
+
+knitr::kables(
+  list(
+    knitr::kable(RNA, "rst", col.names = "DEGs Upregulated"),
+    knitr::kable(COMMON, "rst", col.names = "Overlaps DEGs + DEPGs"),
+    knitr::kable(CATD, "rst", col.names = "DEPGs Upregulated"))
+)
+```
+
+#### PFC vs CTX
+
+```{r}
+common_K27ac_PFCvsCTX <- intersect(PFCvsCTXrnaSigUp$symbol, PFCvsCTXcatdSigUp$symbol)
+knitr::kable(common_K27ac_PFCvsCTX, "rst", col.names = "Genes Overlapping") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+
+a=length(PFCvsCTXrnaSigUp$symbol)
+b=length(PFCvsCTXcatdSigUp$symbol)
+c=length(common_K27ac_PFCvsCTX)
+
+
+RNA=a-c
+CATD=b-c
+COMMON=c
+
+knitr::kables(
+  list(
+    knitr::kable(RNA, "rst", col.names = "DEGs Upregulated"),
+    knitr::kable(COMMON, "rst", col.names = "Overlaps DEGs + DEPGs"),
+    knitr::kable(CATD, "rst", col.names = "DEPGs Upregulated"))
+)
+```
+
+#### STR vs PFC
+
+```{r}
+common_K27ac_STRvsPFC <- intersect(STRvsPFCrnaSigUp$symbol, STRvsPFCcatdSigUp$symbol)
+knitr::kable(common_K27ac_STRvsPFC, "rst", col.names = "Genes Overlapping") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+
+a=length(STRvsPFCrnaSigUp$symbol)
+b=length(STRvsPFCcatdSigUp$symbol)
+c=length(common_K27ac_STRvsPFC)
+
+
+RNA=a-c
+CATD=b-c
+COMMON=c
+
+knitr::kables(
+  list(
+    knitr::kable(RNA, "rst", col.names = "DEGs Upregulated"),
+    knitr::kable(COMMON, "rst", col.names = "Overlaps DEGs + DEPGs"),
+    knitr::kable(CATD, "rst", col.names = "DEPGs Upregulated"))
+)
+```
+
+#### STR vs CTX
+
+```{r}
+common_K27ac_STRvsCTX <- intersect(STRvsCTXrnaSigUp$symbol, STRvsCTXcatdSigUp$symbol)
+knitr::kable(common_K27ac_STRvsCTX, "rst", col.names = "Genes Overlapping") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+
+a=length(STRvsCTXrnaSigUp$symbol)
+b=length(STRvsCTXcatdSigUp$symbol)
+c=length(common_K27ac_STRvsCTX)
+
+
+RNA=a-c
+CATD=b-c
+COMMON=c
+
+knitr::kables(
+  list(
+    knitr::kable(RNA, "rst", col.names = "DEGs Upregulated"),
+    knitr::kable(COMMON, "rst", col.names = "Overlaps DEGs + DEPGs"),
+    knitr::kable(CATD, "rst", col.names = "DEPGs Upregulated"))
+)
+```
+
+#### HPP vs VTA
+
+```{r}
+common_K27ac_HPPvsVTA <- intersect(HPPvsVTArnaSigUp$symbol, HPPvsVTAcatdSigUp$symbol)
+knitr::kable(common_K27ac_HPPvsVTA, "rst", col.names = "Genes Overlapping") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+
+
+a=length(HPPvsVTArnaSigUp$symbol)
+b=length(HPPvsVTAcatdSigUp$symbol)
+c=length(common_K27ac_HPPvsVTA)
+
+
+RNA=a-c
+CATD=b-c
+COMMON=c
+
+knitr::kables(
+  list(
+    knitr::kable(RNA, "rst", col.names = "DEGs Upregulated"),
+    knitr::kable(COMMON, "rst", col.names = "Overlaps DEGs + DEPGs"),
+    knitr::kable(CATD, "rst", col.names = "DEPGs Upregulated"))
+)
+```
+
+#### CTX vs VTA
+
+```{r}
+common_K27ac_CTXvsVTA <- intersect(CTXvsVTArnaSigUp$symbol, CTXvsVTAcatdSigUp$symbol)
+knitr::kable(common_K27ac_CTXvsVTA, "rst", col.names = "Genes Overlapping") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+
+a=length(CTXvsVTArnaSigUp$symbol)
+b=length(CTXvsVTAcatdSigUp$symbol)
+c=length(common_K27ac_CTXvsVTA)
+
+
+RNA=a-c
+CATD=b-c
+COMMON=c
+
+knitr::kables(
+  list(
+    knitr::kable(RNA, "rst", col.names = "DEGs Upregulated"),
+    knitr::kable(COMMON, "rst", col.names = "Overlaps DEGs + DEPGs"),
+    knitr::kable(CATD, "rst", col.names = "DEPGs Upregulated"))
+)
+```
+
+#### HPP vs PFC
+
+```{r}
+common_K27ac_HPPvsPFC <- intersect(HPPvsPFCrnaSigUp$symbol, HPPvsPFCcatdSigUp$symbol)
+knitr::kable(common_K27ac_HPPvsPFC, "rst", col.names = "Genes Overlapping") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+
+a=length(HPPvsPFCrnaSigUp$symbol)
+b=length(HPPvsPFCcatdSigUp$symbol)
+c=length(common_K27ac_HPPvsPFC)
+
+
+RNA=a-c
+CATD=b-c
+COMMON=c
+
+knitr::kables(
+  list(
+    knitr::kable(RNA, "rst", col.names = "DEGs Upregulated"),
+    knitr::kable(COMMON, "rst", col.names = "Overlaps DEGs + DEPGs"),
+    knitr::kable(CATD, "rst", col.names = "DEPGs Upregulated"))
+)
+```
+
+### Generate background lists for GO testing based on all significant results, regardless of overlaps for H3K27ac
+
+```{r}
+merged_data1 <- merge(PFCvsVTArnaSig, PFCvsVTAcatdSig, all = TRUE)
+merged_data2 <- merge(HPPvsSTRrnaSig, HPPvsSTRcatdSig, all = TRUE)
+merged_data3 <- merge(STRvsVTArnaSig, STRvsVTAcatdSig, all = TRUE)
+merged_data4 <- merge(HPPvsCTXrnaSig, HPPvsCTXcatdSig, all = TRUE)
+merged_data5 <- merge(PFCvsCTXrnaSig, PFCvsCTXcatdSig, all = TRUE)
+merged_data6 <- merge(STRvsPFCrnaSig, STRvsPFCcatdSig, all = TRUE)
+merged_data7 <- merge(STRvsCTXrnaSig, STRvsCTXcatdSig, all = TRUE)
+merged_data8 <- merge(HPPvsVTArnaSig, HPPvsVTAcatdSig, all = TRUE)
+merged_data9 <- merge(CTXvsVTArnaSig, CTXvsVTAcatdSig, all = TRUE)
+merged_data10 <- merge(HPPvsPFCrnaSig, HPPvsPFCcatdSig, all = TRUE)
+
+merged_data11 <- merge(merged_data1, merged_data2, all = TRUE)
+merged_data12 <- merge(merged_data11, merged_data3, all = TRUE)
+merged_data13 <- merge(merged_data12, merged_data4, all = TRUE)
+merged_data14 <- merge(merged_data13, merged_data5, all = TRUE)
+merged_data15 <- merge(merged_data14, merged_data6, all = TRUE)
+merged_data16 <- merge(merged_data15, merged_data7, all = TRUE)
+merged_data17 <- merge(merged_data16, merged_data8, all = TRUE)
+merged_data18 <- merge(merged_data17, merged_data9, all = TRUE)
+merged_data19 <- merge(merged_data18, merged_data10, all = TRUE)
+
+
+sum(is.na(merged_data19$entrez))
+sum(duplicated(merged_data19$entrez))
+length(rownames(merged_data19))
+
+dup_rows <- duplicated(merged_data19$entrez)
+merged_data_nodup <- merged_data19[!dup_rows, ]
+na_rows <- is.na(merged_data_nodup$entrez)
+merged_data_nodup_noNA <- merged_data_nodup[!na_rows, ]
+
+sum(is.na(merged_data_nodup_noNA$entrez))
+sum(duplicated(merged_data_nodup_noNA$entrez))
+length(rownames(merged_data_nodup_noNA))
+
+gene_matrix_background_K27ac <- merged_data_nodup_noNA$entrez
+
+```
+
+## Selected Gene Ontology Analyses {.tabset}
+### H3K27me3
+
+```{r} 
+
+library(org.Mm.eg.db) 
+library(clusterProfiler)
+
+length(gene_matrix_background_K27me3)
+length(gene_matrix_background_K27ac)
+
+df_common_K27me3_PFCvsVTA <- as.data.frame(common_K27me3_PFCvsVTA)
+df_common_K27me3_PFCvsVTA$GeneID <- df_common_K27me3_PFCvsVTA$common_K27me3_PFCvsVTA
+
+df_common_K27me3_HPPvsSTR <- as.data.frame(common_K27me3_HPPvsSTR)
+df_common_K27me3_HPPvsSTR$GeneID <- df_common_K27me3_HPPvsSTR$common_K27me3_HPPvsSTR
+
+df_common_K27me3_HPPvsCTX <- as.data.frame(common_K27me3_HPPvsCTX)
+df_common_K27me3_HPPvsCTX$GeneID <- df_common_K27me3_HPPvsCTX$common_K27me3_HPPvsCTX
+
+df_common_K27me3_HPPvsVTA <- as.data.frame(common_K27me3_HPPvsVTA)
+df_common_K27me3_HPPvsVTA$GeneID <- df_common_K27me3_HPPvsVTA$common_K27me3_HPPvsVTA
+
+df_common_K27me3_CTXvsVTA <- as.data.frame(common_K27me3_CTXvsVTA)
+df_common_K27me3_CTXvsVTA$GeneID <- df_common_K27me3_CTXvsVTA$common_K27me3_CTXvsVTA
+
+df_common_K27me3_HPPvsPFC <- as.data.frame(common_K27me3_HPPvsPFC)
+df_common_K27me3_HPPvsPFC$GeneID <- df_common_K27me3_HPPvsPFC$common_K27me3_HPPvsPFC
+
+df_common_K27me3_STRvsVTA <- as.data.frame(common_K27me3_STRvsVTA)
+df_common_K27me3_STRvsVTA$GeneID <- df_common_K27me3_STRvsVTA$common_K27me3_STRvsVTA
+
+#df_common_K27me3_PFCvsCTX <- as.data.frame(common_K27me3_PFCvsCTX)
+#df_common_K27me3_PFCvsCTX$GeneID <- df_common_K27me3_PFCvsCTX$common_K27me3_PFCvsCTX
+
+df_common_K27me3_STRvsPFC <- as.data.frame(common_K27me3_STRvsPFC)
+df_common_K27me3_STRvsPFC$GeneID <- df_common_K27me3_STRvsPFC$common_K27me3_STRvsPFC
+
+df_common_K27me3_STRvsCTX <- as.data.frame(common_K27me3_STRvsCTX)
+df_common_K27me3_STRvsCTX$GeneID <- df_common_K27me3_STRvsCTX$common_K27me3_STRvsCTX
+
+df_common_K27me3_PFCvsVTA$Entrez<- mapIds(x = org.Mm.eg.db, keys = df_common_K27me3_PFCvsVTA$GeneID, column = "ENTREZID", keytype = "SYMBOL", multiVals = "first")
+
+df_common_K27me3_HPPvsSTR$Entrez<- mapIds(x = org.Mm.eg.db, keys = df_common_K27me3_HPPvsSTR$GeneID, column = "ENTREZID", keytype = "SYMBOL", multiVals = "first")
+
+df_common_K27me3_HPPvsCTX$Entrez<- mapIds(x = org.Mm.eg.db, keys = df_common_K27me3_HPPvsCTX$GeneID, column = "ENTREZID", keytype = "SYMBOL", multiVals = "first")
+
+df_common_K27me3_HPPvsVTA$Entrez<- mapIds(x = org.Mm.eg.db, keys = df_common_K27me3_HPPvsVTA$GeneID, column = "ENTREZID", keytype = "SYMBOL", multiVals = "first")
+
+df_common_K27me3_CTXvsVTA$Entrez<- mapIds(x = org.Mm.eg.db, keys = df_common_K27me3_CTXvsVTA$GeneID, column = "ENTREZID", keytype = "SYMBOL", multiVals = "first")
+
+df_common_K27me3_HPPvsPFC$Entrez<- mapIds(x = org.Mm.eg.db, keys = df_common_K27me3_HPPvsPFC$GeneID, column = "ENTREZID", keytype = "SYMBOL", multiVals = "first")
+
+df_common_K27me3_STRvsVTA$Entrez<- mapIds(x = org.Mm.eg.db, keys = df_common_K27me3_STRvsVTA$GeneID, column = "ENTREZID", keytype = "SYMBOL", multiVals = "first")
+
+#df_common_K27me3_PFCvsCTX$Entrez<- mapIds(x = org.Mm.eg.db, keys = df_common_K27me3_PFCvsCTX$GeneID, column = "ENTREZID", keytype = "SYMBOL", multiVals = "first")
+
+#df_common_K27me3_STRvsPFC$Entrez<- mapIds(x = org.Mm.eg.db, keys = df_common_K27me3_STRvsPFC$GeneID, column = "ENTREZID", keytype = "SYMBOL", multiVals = "first")
+
+#df_common_K27me3_STRvsCTX$Entrez<- mapIds(x = org.Mm.eg.db, keys = df_common_K27me3_STRvsCTX$GeneID, column = "ENTREZID", keytype = "SYMBOL", multiVals = "first")
+
+
+go_df_common_K27me3_PFCvsVTA <- enrichGO(gene = df_common_K27me3_PFCvsVTA$Entrez, OrgDb = 'org.Mm.eg.db', readable = T, universe = gene_matrix_background_K27me3, ont = "ALL", pAdjustMethod = "fdr", pvalueCutoff = 0.05, qvalueCutoff = 0.10)
+
+go_df_common_K27me3_HPPvsSTR <- enrichGO(gene = df_common_K27me3_HPPvsSTR$Entrez, OrgDb = 'org.Mm.eg.db', readable = T,universe = gene_matrix_background_K27me3, ont = "ALL", pAdjustMethod = "fdr", pvalueCutoff = 0.05, qvalueCutoff = 0.10)
+
+go_df_common_K27me3_HPPvsCTX <- enrichGO(gene = df_common_K27me3_HPPvsCTX$Entrez, OrgDb = 'org.Mm.eg.db', readable = T, universe = gene_matrix_background_K27me3, ont = "ALL", pAdjustMethod = "fdr", pvalueCutoff = 0.05, qvalueCutoff = 0.10)
+
+go_df_common_K27me3_HPPvsVTA <- enrichGO(gene = df_common_K27me3_HPPvsVTA$Entrez, OrgDb = 'org.Mm.eg.db', readable = T, universe = gene_matrix_background_K27me3, ont = "ALL", pAdjustMethod = "fdr", pvalueCutoff = 0.05, qvalueCutoff = 0.10)
+
+go_df_common_K27me3_CTXvsVTA <- enrichGO(gene = df_common_K27me3_CTXvsVTA$Entrez, OrgDb = 'org.Mm.eg.db', readable = T, universe = gene_matrix_background_K27me3, ont = "ALL", pAdjustMethod = "fdr", pvalueCutoff = 0.05, qvalueCutoff = 0.10)
+
+go_df_common_K27me3_HPPvsPFC <- enrichGO(gene = df_common_K27me3_HPPvsPFC$Entrez, OrgDb = 'org.Mm.eg.db', readable = T, universe = gene_matrix_background_K27me3, ont = "ALL", pAdjustMethod = "fdr", pvalueCutoff = 0.05, qvalueCutoff = 0.10)
+
+go_df_common_K27me3_STRvsVTA <- enrichGO(gene = df_common_K27me3_STRvsVTA$Entrez, OrgDb = 'org.Mm.eg.db', readable = T, universe = gene_matrix_background_K27me3, ont = "ALL", pAdjustMethod = "fdr", pvalueCutoff = 0.05, qvalueCutoff = 0.10)
+
+#go_df_common_K27me3_PFCvsCTX <- enrichGO(gene = df_common_K27me3_PFCvsCTX$Entrez, OrgDb = 'org.Mm.eg.db', readable = T, universe = gene_matrix_background_K27me3, ont = "ALL", pAdjustMethod = "fdr", pvalueCutoff = 0.05, qvalueCutoff = 0.10)
+
+#go_df_common_K27me3_STRvsPFC <- enrichGO(gene = df_common_K27me3_STRvsPFC$Entrez, OrgDb = 'org.Mm.eg.db', readable = T, universe = gene_matrix_background_K27me3, ont = "ALL", pAdjustMethod = "fdr", pvalueCutoff = 0.05, qvalueCutoff = 0.10)
+
+#go_df_common_K27me3_STRvsCTX <- enrichGO(gene = df_common_K27me3_STRvsCTX$Entrez, OrgDb = 'org.Mm.eg.db', readable = T, universe = gene_matrix_background_K27me3, ont = "ALL", pAdjustMethod = "fdr", pvalueCutoff = 0.05, qvalueCutoff = 0.10)
+
+
+##################################################################################### 
+
+go_enrich_dataset_K27me3_PFCvsVTA <- as.data.frame(go_df_common_K27me3_PFCvsVTA)
+go_enrich_dataset_K27me3_HPPvsSTR <-as.data.frame(go_df_common_K27me3_HPPvsSTR)
+go_enrich_dataset_K27me3_CTXvsVTA <- as.data.frame(go_df_common_K27me3_CTXvsVTA)
+go_enrich_dataset_K27me3_HPPvsPFC <- as.data.frame(go_df_common_K27me3_HPPvsPFC)
+go_enrich_dataset_K27me3_HPPvsCTX <- as.data.frame(go_df_common_K27me3_HPPvsCTX)
+go_enrich_dataset_K27me3_HPPvsVTA <- as.data.frame(go_df_common_K27me3_HPPvsVTA)
+go_enrich_dataset_K27me3_STRvsVTA <- as.data.frame(go_df_common_K27me3_STRvsVTA)
+## No Enrichment results below
+#go_enrich_dataset_K27me3_PFCvsCTX <- as.data.frame(go_df_common_K27me3_PFCvsCTX)
+#go_enrich_dataset_K27me3_STRvsPFC <- as.data.frame(go_df_common_K27me3_STRvsPFC)
+#go_enrich_dataset_K27me3_STRvsCTX <- as.data.frame(go_df_common_K27me3_STRvsCTX)
+
+go_enrich_dataset_K27me3_PFCvsVTA$Comparison <- "PFCvsVTA"
+go_enrich_dataset_K27me3_HPPvsSTR$Comparison <- "HPPvsSTR"
+go_enrich_dataset_K27me3_CTXvsVTA$Comparison <- "CTXvsVTA"
+go_enrich_dataset_K27me3_HPPvsPFC$Comparison <- "HPPvsPFC"
+go_enrich_dataset_K27me3_HPPvsCTX$Comparison <- "HPPvsCTX"
+go_enrich_dataset_K27me3_HPPvsVTA$Comparison <- "HPPvsVTA"
+go_enrich_dataset_K27me3_STRvsVTA$Comparison <- "STRvsVTA"
+#go_enrich_dataset_K27me3_PFCvsCTX$Comparison <- "PFCvsCTX"
+#go_enrich_dataset_K27me3_STRvsPFC$Comparison <- "STRvsPFC"
+#go_enrich_dataset_K27me3_STRvsCTX$Comparison <- "STRvsCTX"
+
+go_enrich_dataset_K27me3_PFCvsVTA$Mark <- "H3K27me3"
+go_enrich_dataset_K27me3_HPPvsSTR$Mark <- "H3K27me3"
+go_enrich_dataset_K27me3_CTXvsVTA$Mark <- "H3K27me3"
+go_enrich_dataset_K27me3_HPPvsPFC$Mark <- "H3K27me3"
+go_enrich_dataset_K27me3_HPPvsCTX$Mark <- "H3K27me3"
+go_enrich_dataset_K27me3_HPPvsVTA$Mark <- "H3K27me3"
+go_enrich_dataset_K27me3_STRvsVTA$Mark <- "H3K27me3"
+#go_enrich_dataset_K27me3_PFCvsCTX$Mark <- "H3K27me3"
+#go_enrich_dataset_K27me3_STRvsPFC$Mark <- "H3K27me3"
+#go_enrich_dataset_K27me3_STRvsCTX$Mark <- "H3K27me3"
+
+GO_K27me3_Overlap_Combined1 <- rbind(go_enrich_dataset_K27me3_PFCvsVTA, go_enrich_dataset_K27me3_HPPvsSTR) 
+GO_K27me3_Overlap_Combined2 <- rbind(GO_K27me3_Overlap_Combined1, go_enrich_dataset_K27me3_CTXvsVTA)
+GO_K27me3_Overlap_Combined3 <- rbind(GO_K27me3_Overlap_Combined2, go_enrich_dataset_K27me3_HPPvsPFC) 
+GO_K27me3_Overlap_Combined4 <- rbind(GO_K27me3_Overlap_Combined3, go_enrich_dataset_K27me3_HPPvsCTX)
+GO_K27me3_Overlap_Combined5 <- rbind(GO_K27me3_Overlap_Combined4, go_enrich_dataset_K27me3_HPPvsVTA) 
+GO_K27me3_Overlap_Final <- rbind(GO_K27me3_Overlap_Combined5, go_enrich_dataset_K27me3_STRvsVTA)
+
+```
+
+### H3K27ac
+
+```{r}
+
+df_common_K27ac_PFCvsVTA <- as.data.frame(common_K27ac_PFCvsVTA)
+df_common_K27ac_PFCvsVTA$GeneID <- df_common_K27ac_PFCvsVTA$common_K27ac_PFCvsVTA
+
+df_common_K27ac_HPPvsSTR <- as.data.frame(common_K27ac_HPPvsSTR)
+df_common_K27ac_HPPvsSTR$GeneID <- df_common_K27ac_HPPvsSTR$common_K27ac_HPPvsSTR
+
+df_common_K27ac_HPPvsCTX <- as.data.frame(common_K27ac_HPPvsCTX)
+df_common_K27ac_HPPvsCTX$GeneID <- df_common_K27ac_HPPvsCTX$common_K27ac_HPPvsCTX
+
+df_common_K27ac_HPPvsVTA <- as.data.frame(common_K27ac_HPPvsVTA)
+df_common_K27ac_HPPvsVTA$GeneID <- df_common_K27ac_HPPvsVTA$common_K27ac_HPPvsVTA
+
+df_common_K27ac_CTXvsVTA <- as.data.frame(common_K27ac_CTXvsVTA)
+df_common_K27ac_CTXvsVTA$GeneID <- df_common_K27ac_CTXvsVTA$common_K27ac_CTXvsVTA
+
+df_common_K27ac_HPPvsPFC <- as.data.frame(common_K27ac_HPPvsPFC)
+df_common_K27ac_HPPvsPFC$GeneID <- df_common_K27ac_HPPvsPFC$common_K27ac_HPPvsPFC
+
+df_common_K27ac_STRvsVTA <- as.data.frame(common_K27ac_STRvsVTA)
+df_common_K27ac_STRvsVTA$GeneID <- df_common_K27ac_STRvsVTA$common_K27ac_STRvsVTA
+
+df_common_K27ac_PFCvsCTX <- as.data.frame(common_K27ac_PFCvsCTX)
+df_common_K27ac_PFCvsCTX$GeneID <- df_common_K27ac_PFCvsCTX$common_K27ac_PFCvsCTX
+
+df_common_K27ac_STRvsPFC <- as.data.frame(common_K27ac_STRvsPFC)
+df_common_K27ac_STRvsPFC$GeneID <- df_common_K27ac_STRvsPFC$common_K27ac_STRvsPFC
+
+df_common_K27ac_STRvsCTX <- as.data.frame(common_K27ac_STRvsCTX)
+df_common_K27ac_STRvsCTX$GeneID <- df_common_K27ac_STRvsCTX$common_K27ac_STRvsCTX
+
+df_common_K27ac_PFCvsVTA$Entrez<- mapIds(x = org.Mm.eg.db, keys = df_common_K27ac_PFCvsVTA$GeneID, column = "ENTREZID", keytype = "SYMBOL", multiVals = "first")
+
+df_common_K27ac_HPPvsSTR$Entrez<- mapIds(x = org.Mm.eg.db, keys = df_common_K27ac_HPPvsSTR$GeneID, column = "ENTREZID", keytype = "SYMBOL", multiVals = "first")
+
+df_common_K27ac_HPPvsCTX$Entrez<- mapIds(x = org.Mm.eg.db, keys = df_common_K27ac_HPPvsCTX$GeneID, column = "ENTREZID", keytype = "SYMBOL", multiVals = "first")
+
+df_common_K27ac_HPPvsVTA$Entrez<- mapIds(x = org.Mm.eg.db, keys = df_common_K27ac_HPPvsVTA$GeneID, column = "ENTREZID", keytype = "SYMBOL", multiVals = "first")
+
+df_common_K27ac_CTXvsVTA$Entrez<- mapIds(x = org.Mm.eg.db, keys = df_common_K27ac_CTXvsVTA$GeneID, column = "ENTREZID", keytype = "SYMBOL", multiVals = "first")
+
+df_common_K27ac_HPPvsPFC$Entrez<- mapIds(x = org.Mm.eg.db, keys = df_common_K27ac_HPPvsPFC$GeneID, column = "ENTREZID", keytype = "SYMBOL", multiVals = "first")
+
+df_common_K27ac_STRvsVTA$Entrez<- mapIds(x = org.Mm.eg.db, keys = df_common_K27ac_STRvsVTA$GeneID, column = "ENTREZID", keytype = "SYMBOL", multiVals = "first")
+
+#df_common_K27ac_PFCvsCTX$Entrez<- mapIds(x = org.Mm.eg.db, keys = df_common_K27ac_PFCvsCTX$GeneID, column = "ENTREZID", keytype = "SYMBOL", multiVals = "first")
+
+df_common_K27ac_STRvsPFC$Entrez<- mapIds(x = org.Mm.eg.db, keys = df_common_K27ac_STRvsPFC$GeneID, column = "ENTREZID", keytype = "SYMBOL", multiVals = "first")
+
+#df_common_K27ac_STRvsCTX$Entrez<- mapIds(x = org.Mm.eg.db, keys = df_common_K27ac_STRvsCTX$GeneID, column = "ENTREZID", keytype = "SYMBOL", multiVals = "first")
+
+go_df_common_K27ac_PFCvsVTA <- enrichGO(gene = df_common_K27ac_PFCvsVTA$Entrez, OrgDb = 'org.Mm.eg.db', readable = T, universe = gene_matrix_background_K27ac, ont = "ALL", pAdjustMethod = "fdr", pvalueCutoff = 0.05, qvalueCutoff = 0.10)
+
+go_df_common_K27ac_HPPvsSTR <- enrichGO(gene = df_common_K27ac_HPPvsSTR$Entrez, OrgDb = 'org.Mm.eg.db', readable = T, universe = gene_matrix_background_K27ac, ont = "ALL", pAdjustMethod = "fdr", pvalueCutoff = 0.05, qvalueCutoff = 0.10)
+
+go_df_common_K27ac_HPPvsCTX <- enrichGO(gene = df_common_K27ac_HPPvsCTX$Entrez, OrgDb = 'org.Mm.eg.db', readable = T, universe = gene_matrix_background_K27ac, ont = "ALL", pAdjustMethod = "fdr", pvalueCutoff = 0.05, qvalueCutoff = 0.10)
+
+go_df_common_K27ac_HPPvsVTA <- enrichGO(gene = df_common_K27ac_HPPvsVTA$Entrez, OrgDb = 'org.Mm.eg.db', readable = T, universe = gene_matrix_background_K27ac, ont = "ALL", pAdjustMethod = "fdr", pvalueCutoff = 0.05, qvalueCutoff = 0.10)
+
+go_df_common_K27ac_CTXvsVTA <- enrichGO(gene = df_common_K27ac_CTXvsVTA$Entrez, OrgDb = 'org.Mm.eg.db', readable = T, universe = gene_matrix_background_K27ac, ont = "ALL", pAdjustMethod = "fdr", pvalueCutoff = 0.05, qvalueCutoff = 0.10)
+
+go_df_common_K27ac_HPPvsPFC <- enrichGO(gene = df_common_K27ac_HPPvsPFC$Entrez, OrgDb = 'org.Mm.eg.db', readable = T, universe = gene_matrix_background_K27ac, ont = "ALL", pAdjustMethod = "fdr", pvalueCutoff = 0.05, qvalueCutoff = 0.10)
+
+go_df_common_K27ac_STRvsVTA <- enrichGO(gene = df_common_K27ac_STRvsVTA$Entrez, OrgDb = 'org.Mm.eg.db', readable = T, universe = gene_matrix_background_K27ac, ont = "ALL", pAdjustMethod = "fdr", pvalueCutoff = 0.05, qvalueCutoff = 0.10)
+
+#go_df_common_K27ac_PFCvsCTX <- enrichGO(gene = df_common_K27ac_PFCvsCTX$Entrez, OrgDb = 'org.Mm.eg.db', readable = T, universe = gene_matrix_background_K27ac, ont = "ALL", pAdjustMethod = "fdr", pvalueCutoff = 0.05, qvalueCutoff = 0.10)
+
+go_df_common_K27ac_STRvsPFC <- enrichGO(gene = df_common_K27ac_STRvsPFC$Entrez, OrgDb = 'org.Mm.eg.db', readable = T, universe = gene_matrix_background_K27ac, ont = "ALL", pAdjustMethod = "fdr", pvalueCutoff = 0.05, qvalueCutoff = 0.10)
+
+#go_df_common_K27ac_STRvsCTX <- enrichGO(gene = df_common_K27ac_STRvsCTX$Entrez, OrgDb = 'org.Mm.eg.db', readable = T, universe = gene_matrix_background_K27ac, ont = "ALL", pAdjustMethod = "fdr", pvalueCutoff = 0.05, qvalueCutoff = 0.10)
+
+######################################################################################################################################## 
+
+go_enrich_dataset_K27ac_PFCvsVTA <- as.data.frame(go_df_common_K27ac_PFCvsVTA)
+go_enrich_dataset_K27ac_HPPvsSTR <- as.data.frame(go_df_common_K27ac_HPPvsSTR)
+go_enrich_dataset_K27ac_CTXvsVTA <- as.data.frame(go_df_common_K27ac_CTXvsVTA)
+go_enrich_dataset_K27ac_HPPvsPFC <- as.data.frame(go_df_common_K27ac_HPPvsPFC)
+go_enrich_dataset_K27ac_HPPvsCTX <- as.data.frame(go_df_common_K27ac_HPPvsCTX)
+go_enrich_dataset_K27ac_HPPvsVTA <- as.data.frame(go_df_common_K27ac_HPPvsVTA)
+go_enrich_dataset_K27ac_STRvsVTA <- as.data.frame(go_df_common_K27ac_STRvsVTA)
+go_enrich_dataset_K27ac_STRvsPFC <- as.data.frame(go_df_common_K27ac_STRvsPFC) 
+## No Enrichment results below
+#go_enrich_dataset_K27ac_PFCvsCTX <- as.data.frame(go_df_common_K27ac_PFCvsCTX)
+#go_enrich_dataset_K27ac_STRvsCTX <- as.data.frame(go_df_common_K27ac_STRvsCTX)
+
+#go_enrich_dataset_K27ac_PFCvsVTA$Comparison <- "PFCvsVTA"
+go_enrich_dataset_K27ac_HPPvsSTR$Comparison <- "HPPvsSTR"
+go_enrich_dataset_K27ac_CTXvsVTA$Comparison <- "CTXvsVTA"
+go_enrich_dataset_K27ac_HPPvsPFC$Comparison <- "HPPvsPFC"
+go_enrich_dataset_K27ac_HPPvsCTX$Comparison <- "HPPvsCTX"
+go_enrich_dataset_K27ac_HPPvsVTA$Comparison <- "HPPvsVTA"
+go_enrich_dataset_K27ac_STRvsVTA$Comparison <- "STRvsVTA"
+go_enrich_dataset_K27ac_STRvsPFC$Comparison <- "STRvsPFC"
+#go_enrich_dataset_K27ac_PFCvsCTX$Comparison <- "PFCvsCTX"
+#go_enrich_dataset_K27ac_STRvsCTX$Comparison <- "STRvsCTX"
+
+#go_enrich_dataset_K27ac_PFCvsVTA$Mark <- "H3K27ac"
+go_enrich_dataset_K27ac_HPPvsSTR$Mark <- "H3K27ac"
+go_enrich_dataset_K27ac_CTXvsVTA$Mark <- "H3K27ac"
+go_enrich_dataset_K27ac_HPPvsPFC$Mark <- "H3K27ac"
+go_enrich_dataset_K27ac_HPPvsCTX$Mark <- "H3K27ac"
+go_enrich_dataset_K27ac_HPPvsVTA$Mark <- "H3K27ac"
+go_enrich_dataset_K27ac_STRvsVTA$Mark <- "H3K27ac"
+go_enrich_dataset_K27ac_STRvsPFC$Mark <- "H3K27ac"
+#go_enrich_dataset_K27ac_PFCvsCTX$Mark <- "H3K27ac"
+#go_enrich_dataset_K27ac_STRvsCTX$Mark <- "H3K27ac"
+
+GO_K27ac_Overlap_Combined1 <- (go_enrich_dataset_K27ac_HPPvsSTR) 
+GO_K27ac_Overlap_Combined2 <- rbind(GO_K27ac_Overlap_Combined1, go_enrich_dataset_K27ac_CTXvsVTA)
+GO_K27ac_Overlap_Combined3 <- rbind(GO_K27ac_Overlap_Combined2, go_enrich_dataset_K27ac_HPPvsPFC) 
+GO_K27ac_Overlap_Combined4 <- rbind(GO_K27ac_Overlap_Combined3, go_enrich_dataset_K27ac_HPPvsCTX)
+GO_K27ac_Overlap_Combined5 <- rbind(GO_K27ac_Overlap_Combined4, go_enrich_dataset_K27ac_HPPvsVTA)
+GO_K27ac_Overlap_Combined6 <- rbind(GO_K27ac_Overlap_Combined5, go_enrich_dataset_K27ac_STRvsVTA)
+GO_K27ac_Overlap_Final <- rbind(GO_K27ac_Overlap_Combined6, go_enrich_dataset_K27ac_STRvsPFC)
+
+```
+
+### Combined Plots
+
+```{r fig.height=12, fig.width=12}
+
+########################################################################################################################################## 
+GP_BothMarks_Overlap_Final <- rbind(GO_K27me3_Overlap_Final,GO_K27ac_Overlap_Final)
+#write.csv(GP_BothMarks_Overlap_Final, "output/RNASeq_CATD_Overlaps/GOPathways_BothMarks_BasedonVennDiagrams_FullList.csv")
+
+########################################################################################################################################## 
+
+K27me3_filt <- GO_K27me3_Overlap_Final %>%
+  dplyr::filter(Count >=5)
+
+K27me3_top_desc <- K27me3_filt %>%
+  group_by(Description) %>%
+  summarise(best_p = min(p.adjust, na.rm = TRUE), .groups = "drop") %>%
+  arrange(best_p, Description) %>%
+  slice_head(n = 25) %>%
+  pull(Description)
+
+K27me3_result_top25_expand <- K27me3_filt %>%
+  dplyr::filter(Description %in% K27me3_top_desc) %>%
+  arrange(Description, p.adjust)
+
+K27me3_summary_top25 <- K27me3_filt %>%
+  dplyr::filter(Description %in% K27me3_top_desc) %>%
+  group_by(Description) %>%
+  summarise(
+    best_p = min(p.adjust, na.rm = TRUE),
+    n_rows = n(),                       
+    n_comp = n_distinct(Comparison),    
+    .groups = "drop"
+  ) %>%
+  arrange(best_p, Description)
+
+########################################################################################################################################## 
+
+K27ac_filt <- GO_K27ac_Overlap_Final %>%
+  dplyr::filter(Count >=5)
+
+K27ac_top_desc <- K27ac_filt %>%
+  group_by(Description) %>%
+  summarise(best_p = min(p.adjust, na.rm = TRUE), .groups = "drop") %>%
+  arrange(best_p, Description) %>%
+  slice_head(n = 25) %>%
+  pull(Description)
+
+K27ac_result_top25_expand <- K27ac_filt %>%
+  dplyr::filter(Description %in% K27ac_top_desc) %>%
+  arrange(Description, p.adjust)
+
+K27ac_summary_top25 <- K27ac_filt %>%
+  dplyr::filter(Description %in% K27ac_top_desc) %>%
+  group_by(Description) %>%
+  summarise(
+    best_p = min(p.adjust, na.rm = TRUE),
+    n_rows = n(),                     
+    n_comp = n_distinct(Comparison),    
+    .groups = "drop"
+  ) %>%
+  arrange(best_p, Description)
+
+########################################################################################################################################## 
+
+GO_BothMarks_Overlap_Final_Top25Each <- rbind(K27me3_result_top25_expand, K27ac_result_top25_expand)
+
+#write.csv(GO_BothMarks_Overlap_Final_Top25Each, "output/RNASeq_CATD_Overlaps/GOPathways_BothMarks_BasedonVennDiagrams_FilteredTop25.csv")
+
+########################################################################################################################################## 
+
+
+
+GO_BothMarks_Overlap_Final_Top25Each$Description = str_to_sentence(GO_BothMarks_Overlap_Final_Top25Each$Description)
+
+GO_BothMarks_Overlap_Final_Top25Each$Mark <- as.character(GO_BothMarks_Overlap_Final_Top25Each$Mark)
+GO_BothMarks_Overlap_Final_Top25Each$Mark <- factor(GO_BothMarks_Overlap_Final_Top25Each$Mark, levels=unique(GO_BothMarks_Overlap_Final_Top25Each$Mark))
+GO_BothMarks_Overlap_Final_Top25Each$Description <- as.character(GO_BothMarks_Overlap_Final_Top25Each$Description)
+GO_BothMarks_Overlap_Final_Top25Each$Description <- factor(GO_BothMarks_Overlap_Final_Top25Each$Description, levels=unique(GO_BothMarks_Overlap_Final_Top25Each$Description))
+
+S1 <- ggplot(GO_BothMarks_Overlap_Final_Top25Each, aes(x= Comparison, y=Description, size=Count, color=qvalue, group=Mark))+
+  geom_point(alpha = 0.8) + 
+  theme_bw()+ 
+  theme(legend.position = "right", legend.direction = "vertical", legend.justification = "left")+
+  facet_wrap(~Mark, scales = "free_y")
+
+S1 = S1+scale_color_gradient(low = "mediumblue", high = "red2", space ="Lab") 
+S1+scale_size(range = c(2, 5)) 
+
+#pdf("output/RNASeq_CATD_Overlaps/GO_SignOverlaps_DotPlot_Filtered.pdf", width = 25, height = 15)
+S1+scale_size(range = c(5, 10)) 
+#dev.off()
+
+
+```
+
+# Session Info
+
+```{r Print SessionInfo}
+
+sessionInfo()
+
+```

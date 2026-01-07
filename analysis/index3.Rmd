@@ -1,5 +1,5 @@
 ---
-title: "Home"
+title: "Annotating Peaks For DESeq2"
 site: workflowr::wflow_site
 output:
   workflowr::wflow_html:
@@ -8,4 +8,264 @@ editor_options:
   chunk_output_type: console
 ---
 
-Welcome to my research website.
+
+```{r}
+library(EnsDb.Mmusculus.v75)
+library(ChIPseeker)
+library(clusterProfiler)
+library(AnnotationDbi)
+library(org.Mm.eg.db)
+library(TxDb.Mmusculus.UCSC.mm10.knownGene)
+library(ChIPpeakAnno)
+library(BSgenome.Mmusculus.UCSC.mm10)
+library(seqinr)
+library(dplyr)
+library(GenomicRanges)
+library(chromVAR)
+library(plyr)
+library(tibble)
+library(data.table)
+library(GenomicDistributions)
+
+```
+
+# Please Read Below
+
+In order to run this analysis, you must first download the corresponding peak files from https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE277753. You will need all peak bed files as well as associated BAM files placed into a folder in the data subdirectory, which you will need to create.
+
+To make this easier and less data intensive, we have provided a secondary option, which is to skip to "Skip to here if loading data" section of this script and utilize the RData we generated from the code below.
+
+The third and final option is to download the peak count matrices from the GEO link above.
+
+```{r Extract Significant Peaks, eval=FALSE, message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+
+#setwd("/home/avm27/Documents/Raw_Sequencing_Data/BrainRegionMicroglia/RegionalMicroglialTranscriptomicsandEpigenomics")
+
+projPath="data/CATD_Peaks"
+mPeak = GRanges()
+
+
+histL =c("PFC8-H3K27ac","PFC9-H3K27ac","STR8-H3K27ac", "STR9-H3K27ac", "HPP8-H3K27ac","HPP9-H3K27ac", "VTA8-H3K27ac","VTA9-H3K27ac", "CTX8-H3K27ac", "CTX9-H3K27ac", "PFC8-H3K27me3","PFC9-H3K27me3","STR8-H3K27me3", "STR9-H3K27me3", "HPP8-H3K27me3","HPP9-H3K27me3", "VTA8-H3K27me3", "VTA9-H3K27me3", "CTX8-H3K27me3", "CTX9-H3K27me3")
+
+
+for(hist in histL){
+    peakRes = read.table(paste0(projPath, "/", hist, "_dupMarked_merge_normalized_spikein_seacr_control.peaks.stringent.bed"), header = FALSE,
+                         fill = TRUE)
+    mPeak = GRanges(seqnames = peakRes$V1, IRanges(start = peakRes$V2, end = peakRes$V3), strand = "*") %>% append(mPeak, .)
+}
+
+masterPeak = GenomicRanges::reduce(mPeak)
+masterPeak
+
+```
+
+
+```{r Annotate Peaks, eval=FALSE, include=FALSE}
+
+annoData <- toGRanges(TxDb.Mmusculus.UCSC.mm10.knownGene, feature="gene")
+
+annot <- annotatePeakInBatch(masterPeak, 
+                             AnnotationData=annoData,
+                             output="overlapping",
+                             PeakLocForDistance = "start",
+                             select = "first")
+
+peak.anno = annotatePeak(peak = annot,
+                         tssRegion = c(-5000, 5000),
+                         TxDb = TxDb.Mmusculus.UCSC.mm10.knownGene,
+                         annoDb = "org.Mm.eg.db",
+                         level = "gene",
+                         overlap = "TSS")
+
+
+dfPA = as.data.frame(peak.anno)
+
+masterPeak.anno <- makeGRangesFromDataFrame(dfPA,
+                                            keep.extra.columns=TRUE,
+                                            ignore.strand=FALSE,
+                                            seqinfo=NULL,
+                                            seqnames.field=c("seqnames", "seqname",
+                                                             "chromosome", "chrom",
+                                                             "chr", "chromosome_name",
+                                                             "seqid"),
+                                            start.field="start",
+                                            end.field=c("end", "stop"),
+                                            strand.field="strand",
+                                            starts.in.df.are.0based=FALSE)
+
+plotAnnoPie(peak.anno)
+
+```
+
+
+```{r Extract Fragments in Peaks, eval=FALSE, include=FALSE}
+
+bamDir="data/CATD_BAMs"
+bamFile= paste0(bamDir, "/", "PFC8-H3K27ac_merged_dupMarked_subsample.sorted.bam")
+bamFile2= paste0(bamDir, "/", "PFC9-H3K27ac_merged_dupMarked_subsample.sorted.bam")
+bamFile3= paste0(bamDir, "/", "STR8-H3K27ac_merged_dupMarked_subsample.sorted.bam")
+bamFile4= paste0(bamDir, "/", "STR9-H3K27ac_merged_dupMarked_subsample.sorted.bam")
+bamFile5= paste0(bamDir, "/", "HPP8-H3K27ac_merged_dupMarked_subsample.sorted.bam")
+bamFile6= paste0(bamDir, "/", "HPP9-H3K27ac_merged_dupMarked_subsample.sorted.bam")
+bamFile7= paste0(bamDir, "/", "VTA8-H3K27ac_merged_dupMarked_subsample.sorted.bam")
+bamFile8= paste0(bamDir, "/", "VTA9-H3K27ac_merged_dupMarked_subsample.sorted.bam")
+bamFile9= paste0(bamDir, "/", "CTX8-H3K27ac_merged_dupMarked_subsample.sorted.bam")
+bamFile10= paste0(bamDir, "/", "CTX9-H3K27ac_merged_dupMarked_subsample.sorted.bam")
+bamFile11= paste0(bamDir, "/", "PFC8-H3K27me3_merged_dupMarked_subsample.sorted.bam")
+bamFile12= paste0(bamDir, "/", "PFC9-H3K27me3_merged_dupMarked_subsample.sorted.bam")
+bamFile13= paste0(bamDir, "/", "STR8-H3K27me3_merged_dupMarked_subsample.sorted.bam")
+bamFile14= paste0(bamDir, "/", "STR9-H3K27me3_merged_dupMarked_subsample.sorted.bam")
+bamFile15= paste0(bamDir, "/", "HPP8-H3K27me3_merged_dupMarked_subsample.sorted.bam")
+bamFile16= paste0(bamDir, "/", "HPP9-H3K27me3_merged_dupMarked_subsample.sorted.bam")
+bamFile17= paste0(bamDir, "/", "VTA8-H3K27me3_merged_dupMarked_subsample.sorted.bam")
+bamFile18= paste0(bamDir, "/", "VTA9-H3K27me3_merged_dupMarked_subsample.sorted.bam")
+bamFile19= paste0(bamDir, "/", "CTX8-H3K27me3_merged_dupMarked_subsample.sorted.bam")
+bamFile20= paste0(bamDir, "/", "CTX9-H3K27me3_merged_dupMarked_subsample.sorted.bam")
+
+
+fragment_counts <- chromVAR::getCounts(c(bamFile, bamFile2, bamFile3, bamFile4, 
+                                         bamFile5, bamFile6, bamFile7, bamFile8, 
+                                         bamFile9, bamFile10, bamFile11, bamFile12, 
+                                         bamFile13, bamFile14, bamFile15, bamFile16, 
+                                         bamFile17, bamFile18, bamFile19, bamFile20), 
+                                         masterPeak.anno, 
+                                         paired = TRUE, by_rg = FALSE, format = "bam")
+
+
+countMat = counts(fragment_counts)
+head(countMat)
+
+```
+
+## Skip to here if loading data
+
+```{r Load in Necessary R Data, eval=FALSE, include=FALSE}
+
+#save(countMat, fragment_counts, file="/home/avm27/Documents/Raw_Sequencing_Data/BrainRegionMicroglia/RegionalMicroglialTranscriptomicsandEpigenomics/data/CATD_DESeq_Data/GeneratingPeaksinFragments.RData")
+
+load("data/CATD_DESeq_Data/GeneratingPeaksinFragments.RData")
+
+```
+
+
+```{r Convert Fragments to Data Frame, eval=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+
+#' Convert a GenomicRanges into a data.table.
+#'
+#' @param GR A Granges object
+#' @return A data.table object.
+grToDt = function(GR) {
+  DF=as.data.frame(elementMetadata(GR))
+  if( ncol(DF) > 0) {
+    DT = data.table(chr=as.vector(seqnames(GR)), 
+                    start=start(GR), end=end(GR), DF)
+  } else {
+    DT = data.table(chr=as.vector(seqnames(GR)), 
+                    start=start(GR), end=end(GR))
+  }
+  return(DT)
+}
+
+
+frag_counts_ft <- grToDt(fragment_counts)
+dup_rows <- duplicated(frag_counts_ft$peak)
+frag_counts_ft <- frag_counts_ft[!dup_rows, ]
+
+```
+
+```{r Assign Names and Peak Names to Gene Locations, eval=FALSE, message=FALSE, warning=FALSE, include=FALSE, paged.print=TRUE}
+
+rownames(countMat) = fragment_counts@rowRanges@elementMetadata@listData[["peak"]]
+
+colnames(countMat) = paste(c("PFC8-H3K27ac","PFC9-H3K27ac",
+                             "STR8-H3K27ac","STR9-H3K27ac", 
+                             "HPP8-H3K27ac","HPP9-H3K27ac",
+                             "VTA8-H3K27ac","VTA9-H3K27ac", 
+                             "CTX8-H3K27ac", "CTX9-H3K27ac",
+                             "PFC8-H3K27me3", "PFC9-H3K27me3",
+                             "STR8-H3K27me3", "STR9-H3K27me3", 
+                             "HPP8-H3K27me3", "HPP9-H3K27me3",
+                             "VTA8-H3K27me3", "VTA9-H3K27me3",
+                             "CTX8-H3K27me3", "CTX9-H3K27me3"))
+
+countMatrownames <- data.frame(row.names(countMat))
+countMatrownames$peak <- countMatrownames$row.names.countMat.
+all(countMatrownames$peak == countMatrownames$row.names.countMat.)
+newrownames <- merge(countMatrownames,frag_counts_ft,by="peak")
+newrownames <- newrownames %>% dplyr::select(1,14,20,22:24)
+
+dup_rows <- duplicated(newrownames$peak)
+newrownames <- newrownames[!dup_rows, ]
+
+countMat_df <- as.data.frame(as.matrix(countMat), rownames = FALSE)
+countMat2 <- cbind(countMat_df, newrownames)
+
+countMat_Anno <- countMat2
+countMat_Anno_singleGenes <- countMat_Anno[,c(1:20,23,24,25)]
+
+countMat_Anno_singleGenes_final <- plyr::ddply(countMat_Anno_singleGenes, "geneId", numcolwise(sum))
+
+countMat_Anno_singleGenes_final$SYMBOL <- mapIds(x = org.Mm.eg.db,
+                     keys = countMat_Anno_singleGenes_final$geneId,
+                     column = "SYMBOL",
+                     keytype = "ENTREZID",
+                     multiVals = "first")
+
+countMat_Anno_singleGenes_final2 <- countMat_Anno_singleGenes_final[complete.cases(countMat_Anno_singleGenes_final), ]
+countMat_Anno_singleGenes_final_NOMATCH <- countMat_Anno_singleGenes_final[!complete.cases(countMat_Anno_singleGenes_final), ]
+
+rownames(countMat_Anno_singleGenes_final2) <- countMat_Anno_singleGenes_final2$SYMBOL
+
+countMat_Anno_singleGenes_final_ac <- countMat_Anno_singleGenes_final2[,c(2:11)]
+countMat_Anno_singleGenes_final_me3 <- countMat_Anno_singleGenes_final2[,c(12:21)]
+countMat_Anno_singleGenes_final_all <- countMat_Anno_singleGenes_final2[,c(2:21)]
+
+dfac <- countMat_Anno_singleGenes_final_ac %>%
+  rename_with(~ sub("-H3K27ac$", "", .x)) %>%
+  dplyr::arrange(rownames(countMat_Anno_singleGenes_final_ac))
+
+
+dfme3 <- countMat_Anno_singleGenes_final_me3 %>%
+  rename_with(~ sub("-H3K27me3$", "", .x)) %>%
+  dplyr::arrange(rownames(countMat_Anno_singleGenes_final_me3))
+
+dfall <- countMat_Anno_singleGenes_final_all %>%
+  dplyr::arrange(rownames(countMat_Anno_singleGenes_final_all))
+
+colnames(dfall) <- sub("-", ".", colnames(dfall))
+
+dfme3 <- dfme3 %>% 
+  mutate(across(everything(), as.integer))
+dfac <- dfac %>% 
+  mutate(across(everything(), as.integer))
+dfall <- dfall %>% 
+  mutate(across(everything(), as.integer)) 
+
+dfac_final_countmat <- dfac %>%
+  rownames_to_column(var="gene_id")
+
+dfme3_final_countmat <- dfme3 %>%
+  rownames_to_column(var="gene_id")
+
+dfall_final_countmat <- dfall %>%
+  rownames_to_column(var="gene_id")
+
+head(dfme3_final_countmat)
+head(dfac_final_countmat)
+head(dfall_final_countmat)
+
+```
+
+```{r Write Results for Use with DESeq2, eval=FALSE, include=FALSE}
+
+#write.csv(dfac_final_countmat, "data/CATD_DESeq_Data/peak_count_matrix_CATD_Final_K27ac.csv", row.names = FALSE)
+#write.csv(dfme3_final_countmat, "data/CATD_DESeq_Data/peak_count_matrix_CATD_Final_K27me3.csv", row.names = FALSE)
+#write.csv(dfall_final_countmat, "data/CATD_DESeq_Data/peak_count_matrix_CATD_Final.csv", row.names = FALSE)
+
+```
+
+```{r SessionInfo, echo=TRUE}
+
+sessionInfo()
+
+```

@@ -1,5 +1,5 @@
 ---
-title: "Home"
+title: "Brain Region Microglia DeSeq2 RNA-Sequencing Analysis"
 site: workflowr::wflow_site
 output:
   workflowr::wflow_html:
@@ -8,4 +8,2182 @@ editor_options:
   chunk_output_type: console
 ---
 
-Welcome to my research website.
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+
+library(gprofiler2)
+library(DESeq2)
+library(ggplot2)
+library(clusterProfiler)
+library(biomaRt)
+library(ReactomePA)
+library(DOSE)
+options(connectionObserver = NULL)
+library(org.Mm.eg.db)
+library(tximport)
+library(ggsci)
+library(pheatmap)
+library(genefilter)
+library(RColorBrewer)
+library(GO.db)
+library(topGO)
+library(dplyr)
+library(gage)
+library(pathview)
+library(WGCNA)
+library(tidyr)
+library(enrichplot)
+library(ggnewscale)
+library(SPIA)
+library(ggpubr)
+library(apeglm)
+library(GOSemSim)
+library(edgeR)
+library(statmod)
+library(org.Mm.eg.db)
+library(tidyverse)
+library(pheatmap)
+library(gplots)
+library(Mus.musculus)
+library(Glimma)
+library(RColorBrewer)
+library(clusterProfiler)
+library(ReactomePA)
+library(enrichplot)
+library(ggnewscale)
+library(knitr)
+library(tables)
+library(vidger)
+library(kableExtra)
+library(regionReport)
+
+# Load required packages
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(ggrepel)
+library(RColorBrewer)
+library(pheatmap)
+library(reshape2)
+
+#BiocManager::install("rrvgo")
+library(rrvgo)
+library(dplyr)
+library(stringr)
+
+
+library(ggplot2)
+library(data.table)
+library(scales)
+library(patchwork)
+
+library(DESeq2)
+library(ComplexUpset)
+library(tibble)
+
+```
+
+
+# Experiment Information
+<center>
+
+<font size="18"> **Epigenetic heterogeneity shapes the transcriptional landscape of regional microglia** </font>
+
+</center>
+
+<center>
+
+Alexander V. Margetts1-3, Samara J. Vilca1-2, Lauren L. Bystrom1-2,  Florence Bourgain-Guglielmetti1-2, & Luis M. Tuesta1-3*
+
+</center>
+
+<center>
+
+1 Department of Psychiatry & Behavioral Sciences
+2 Center for Therapeutic Innovation
+3 Sylvester Comprehensive Cancer Center
+  University of Miami Miller School of Medicine, Miami, FL 33136
+* Corresponding author (ltuesta@miami.edu)
+
+</center>
+
+# Abstract
+
+Abstract
+Microglia, the innate immune cells in the central nervous system, exhibit distinct transcriptional profiles across brain regions that are important for facilitating their specialized function. There has been recent interest in identifying the epigenetic modifications associated with these distinct transcriptional profiles, as these may improve our understanding of the underlying mechanisms governing the functional specialization of microglia. One obstacle to achieving this goal is the large number of microglia required to obtain a genome-wide profile for a single histone modification. Given the cellular and regional heterogeneity of the brain, this would require pooling many samples which would impede biological applications that are limited by numbers of available animals. To overcome this obstacle, we have adapted a method of chromatin profiling known as Cleavage Under Targets and Tagmentation (CUT&Tag-Direct) to profile histone modifications associated with regional differences in gene expression throughout the brain reward system. Consistent with previous studies, we find that transcriptional profiles of microglia vary by brain region. However, here we report that these regional differences also exhibit transcriptional network signatures specific to each region. Additionally, we find that these region-dependent network signatures are associated with differential deposition of H3K27ac and H3K7me3, and while the H3K27me3 landscape is remarkably stable across brain regions, the H3K27ac landscape is most consistent with the anatomical location of microglia which explain their distinct transcriptional profiles. Altogether, these findings underscore the established role of H3K27me3 in cell fate determination and support the active role of H3K27ac in the dynamic regulation of microglial gene expression. In this study, we report a molecular and computational framework that can be applied to improve our understanding of the role of epigenetic regulation in microglia in both health and disease, using as few as 2,500 cells per histone mark.
+
+# DESeq2 Analysis
+
+## Setup and Analysis
+Building DESeq2 input files from gene count matrices output by String Tie.
+
+```{r DESeq2 Build, message=FALSE, warning=FALSE, include=FALSE}
+## Run DEeq2 from Matrix output using Stringtie to compare all groups
+setwd("/home/avm27/Documents/Raw_Sequencing_Data/BrainRegionMicroglia/RegionalMicroglialTranscriptomicsandEpigenomics")
+
+colData <- read.csv("data/RNASeq_DESeq_Data/sample_info_mic_br.csv", sep = ",", row.names = 1)
+#colData <- read.csv("data/RNASeq_DESeq_Data/sample_info_mic_br_WO_CTX.csv", sep = ",", row.names = 1)
+countData <-as.matrix(read.csv("data/RNASeq_DESeq_Data/gene_count_matrix.csv", row.names = "gene_id"))
+
+outliers_to_remove <- c("MCTX4", "MCTX7", "MVTA6")
+
+# Move rownames to column
+colData <- colData %>% tibble::rownames_to_column("sample")
+
+# Remove rows
+colData <- colData %>% dplyr::filter(!sample %in% outliers_to_remove)
+
+# Optional: move back to rownames
+colData <- colData %>% tibble::column_to_rownames("sample")
+
+#colnames(countData)
+#rownames(colData)
+#all(rownames(colData) %in% colnames(countData))
+countData <- countData[, rownames(colData)]
+#all(rownames(colData) == colnames(countData))
+
+```
+
+Running DeSeq2 analysis with factor levels of All vs Sugar, All vs Morphine, and Allvs Withdrawal.
+
+```{r DESeq2 Analysis, echo=FALSE, message=FALSE, warning=FALSE}
+dds <- DESeqDataSetFromMatrix(countData = countData, colData = colData, design = ~condition)
+dds2 <- DESeqDataSetFromMatrix(countData = countData, colData = colData, design = ~condition)
+dds3 <- DESeqDataSetFromMatrix(countData = countData, colData = colData, design = ~condition)
+dds4 <- DESeqDataSetFromMatrix(countData = countData, colData = colData, design = ~condition)
+dds5 <- DESeqDataSetFromMatrix(countData = countData, colData = colData, design = ~condition)
+
+## Filter out counts less than 50 across the rows
+keep <- rowSums(counts(dds)) >= 50
+dds <- dds[keep,]
+keep2 <- rowSums(counts(dds2)) >= 50
+dds2 <- dds2[keep2,]
+keep3 <- rowSums(counts(dds3)) >= 50
+dds3 <- dds3[keep3,]
+keep4 <- rowSums(counts(dds4)) >= 50
+dds4 <- dds4[keep4,]
+keep5 <- rowSums(counts(dds5)) >= 50
+dds5 <- dds5[keep5,]
+
+## Relevel Conditions to Analyze Each group against a specific region
+
+dds$condition <- relevel(dds$condition, ref = "Cortex")
+dds <- DESeq(dds)
+dds2$condition <- relevel(dds2$condition, ref = "Hippocampus")
+dds2 <- DESeq(dds2)
+dds3$condition <- relevel(dds3$condition, ref = "Striatum")
+dds3 <- DESeq(dds3)
+dds4$condition <- relevel(dds4$condition, ref = "PreFrontalCortex")
+dds4 <- DESeq(dds4)
+dds5$condition <- relevel(dds5$condition, ref = "VTA")
+dds5 <- DESeq(dds5)
+```
+
+
+## Plot Estimates from Results {.tabset}
+
+These are the results leveled for each group comparison and include the overview for each result file.
+
+```{r Results, include=FALSE, results='asis'}
+
+res1 <- results(dds, contrast = c("condition", "Hippocampus", "Cortex"))
+res2 <- results(dds, contrast = c("condition", "PreFrontalCortex", "Cortex"))
+res3 <- results(dds4, contrast = c("condition", "Striatum", "PreFrontalCortex"))
+res4 <- results(dds, contrast = c("condition", "Striatum", "Cortex"))
+res5 <- results(dds3, contrast = c("condition", "Hippocampus", "Striatum"))
+res6 <- results(dds5, contrast = c("condition", "Hippocampus", "VTA"))
+res7 <- results(dds5, contrast = c("condition", "Striatum", "VTA"))
+res8 <- results(dds5, contrast = c("condition", "PreFrontalCortex", "VTA"))
+res9 <- results(dds5, contrast = c("condition", "Cortex", "VTA"))
+res10 <- results(dds4, contrast = c("condition", "Hippocampus", "PreFrontalCortex"))
+
+```
+
+
+### HPP vs CTX
+
+```{r echo=FALSE}
+kable(head(res1, 20), caption = "Hippocampus vs Cortex Microglia Results Overview", format = "html", align = "l", booktabs=TRUE) %>% kable_styling(html_font = "Arial", font_size = 10, bootstrap_options = c("striped", "hover", "condensed", "responsive")) %>% scroll_box(width = "1000px", height = "500px")
+
+summary(res1)
+```
+
+### PFC vs CTX
+
+```{r echo=FALSE}
+kable(head(res2, 20), caption = "PFC vs Cortex Microglia Results Overview", format = "html", align = "l", booktabs=TRUE) %>% kable_styling(html_font = "Arial", font_size = 10, bootstrap_options = c("striped", "hover", "condensed", "responsive")) %>% scroll_box(width = "1000px", height = "500px")
+
+summary(res2)
+```
+
+### STR vs PFC
+
+```{r echo=FALSE}
+kable(head(res3, 20), caption = "Striatum vs PFC Microglia Results Overview", format = "html", align = "l", booktabs=TRUE) %>% kable_styling(html_font = "Arial", font_size = 10, bootstrap_options = c("striped", "hover", "condensed", "responsive")) %>% scroll_box(width = "1000px", height = "500px")
+
+summary(res3)
+```
+
+### STR vs CTX
+
+```{r echo=FALSE}
+kable(head(res4, 20), caption = "Striatum vs Cortex Microglia Results Overview", format = "html", align = "l", booktabs=TRUE) %>% kable_styling(html_font = "Arial", font_size = 10, bootstrap_options = c("striped", "hover", "condensed", "responsive")) %>% scroll_box(width = "1000px", height = "500px")
+
+summary(res4)
+```
+
+### HPP vs STR
+
+```{r echo=FALSE}
+kable(head(res5,20), caption = "Hippocampus vs Striatum Microglia Results Overview", format = "html", align = "l", booktabs=TRUE) %>% kable_styling(html_font = "Arial", font_size = 10, bootstrap_options = c("striped", "hover", "condensed", "responsive"))%>% scroll_box(width = "1000px", height = "500px")
+
+summary(res5)
+```
+
+### HPP vs VTA
+
+```{r echo=FALSE}
+kable(head(res6,20), caption = "Hippocampus vs VTA Microglia Results Overview", format = "html", align = "l", booktabs=TRUE) %>% kable_styling(html_font = "Arial", font_size = 10, bootstrap_options = c("striped", "hover", "condensed", "responsive"))%>% scroll_box(width = "1000px", height = "500px")
+
+summary(res6)
+```
+
+### STR vs VTA
+
+```{r echo=FALSE}
+kable(head(res7,20), caption = "Striatum vs VTA Microglia Results Overview", format = "html", align = "l", booktabs=TRUE) %>% kable_styling(html_font = "Arial", font_size = 10, bootstrap_options = c("striped", "hover", "condensed", "responsive"))%>% scroll_box(width = "1000px", height = "500px")
+
+summary(res7)
+```
+
+### PFC vs VTA
+
+```{r echo=FALSE}
+kable(head(res8,20), caption = "PFC vs VTA Microglia Results Overview", format = "html", align = "l", booktabs=TRUE) %>% kable_styling(html_font = "Arial", font_size = 10, bootstrap_options = c("striped", "hover", "condensed", "responsive"))%>% scroll_box(width = "1000px", height = "500px")
+
+summary(res8)
+```
+
+### CTX vs VTA
+
+```{r echo=FALSE}
+kable(head(res9,20), caption = "Cortex vs VTA Microglia Results Overview", format = "html", align = "l", booktabs=TRUE) %>% kable_styling(html_font = "Arial", font_size = 10, bootstrap_options = c("striped", "hover", "condensed", "responsive"))%>% scroll_box(width = "1000px", height = "500px")
+
+summary(res9)
+```
+
+### HPP vs PFC
+
+```{r echo=FALSE}
+kable(head(res10,20), caption = "Hippocampus vs PrefrontalCortex Microglia Results Overview", format = "html", align = "l", booktabs=TRUE) %>% kable_styling(html_font = "Arial", font_size = 10, bootstrap_options = c("striped", "hover", "condensed", "responsive"))%>% scroll_box(width = "1000px", height = "500px")
+
+summary(res10)
+```
+
+
+## Significant DEGs By Condition and Comparison {.tabset} 
+
+This subsection is for annotation the results files to include all necessary information for downstream analyses. This is due to the use of StringTie to generate count matrices with the specific mm10 annotation files that we use. Other methods will probably not require this, but our gene names are split by the "|" delimiter and must be separated in order to accurately generate the required Gene Symbols for mapping to entrez, ensemble and descriptions from Org.mm.eg.db. 
+
+After annotation we subset the results to only view the significantly differentially expressed genes with an adjusted p-value \> 0.05.
+
+```{r Annotate DDS Matrices, message=FALSE, warning=FALSE, include=FALSE, results='asis'}
+## Make new rownames file and split based on pipe from dds file
+deseqrownames <- data.frame(rownames(dds))
+newrownames <- deseqrownames %>% separate(rownames.dds., c("id", "symbol"),sep ="([|])")
+deseqrownames2 <- data.frame(rownames(dds2))
+newrownames2 <- deseqrownames2 %>% separate(rownames.dds2., c("id", "symbol"),sep ="([|])")
+deseqrownames3 <- data.frame(rownames(dds3))
+newrownames3 <- deseqrownames3 %>% separate(rownames.dds3., c("id", "symbol"),sep ="([|])")
+deseqrownames4 <- data.frame(rownames(dds4))
+newrownames4 <- deseqrownames4 %>% separate(rownames.dds4., c("id", "symbol"),sep ="([|])")
+deseqrownames5 <- data.frame(rownames(dds5))
+newrownames5 <- deseqrownames5 %>% separate(rownames.dds5., c("id", "symbol"),sep ="([|])")
+
+#Check to make sure they split correctly and do not overlap
+all(newrownames$id == newrownames$symbol)
+all(newrownames2$id == newrownames2$symbol)
+all(newrownames3$id == newrownames3$symbol)
+all(newrownames4$id == newrownames4$symbol)
+all(newrownames5$id == newrownames5$symbol)
+
+#sum(is.na(newrownames$symbol))
+#sum(duplicated(newrownames$symbol))
+#sum(is.na(newrownames2$symbol))
+#sum(duplicated(newrownames2$symbol))
+#sum(is.na(newrownames3$symbol))
+##sum(duplicated(newrownames3$symbol))
+#sum(is.na(newrownames4$symbol))
+#sum(duplicated(newrownames4$symbol))
+#sum(is.na(newrownames5$symbol))
+#sum(duplicated(newrownames5$symbol))
+
+mcols(dds) <- cbind(mcols(dds), newrownames)
+mcols(dds2) <- cbind(mcols(dds2), newrownames2)
+mcols(dds3) <- cbind(mcols(dds3), newrownames3)
+mcols(dds4) <- cbind(mcols(dds4), newrownames4)
+mcols(dds5) <- cbind(mcols(dds5), newrownames5)
+
+# Add gene symbol to results
+
+res1$symbol <- mcols(dds)$symbol
+res2$symbol <- mcols(dds)$symbol
+res3$symbol <- mcols(dds4)$symbol
+res4$symbol <- mcols(dds)$symbol
+res5$symbol <- mcols(dds3)$symbol
+res6$symbol <- mcols(dds5)$symbol
+res7$symbol <- mcols(dds5)$symbol
+res8$symbol <- mcols(dds5)$symbol
+res9$symbol <- mcols(dds5)$symbol
+res10$symbol <- mcols(dds4)$symbol
+
+
+# Create a list to store the result objects
+result_list <- list()
+
+# Define the number of results
+num_results <- 10
+
+# Loop through each result
+for (i in 1:num_results) {
+  
+  result_name <- paste0("res", i)
+  
+  result_obj <- get(result_name)
+  
+  result_obj$description <- mapIds(x = org.Mm.eg.db,
+                                    keys = result_obj$symbol,
+                                    column = "GENENAME",
+                                    keytype = "SYMBOL",
+                                    multiVals = "first")
+
+  result_obj$entrez <- mapIds(x = org.Mm.eg.db,
+                               keys = result_obj$symbol,
+                               column = "ENTREZID",
+                               keytype = "SYMBOL",
+                               multiVals = "first")
+
+  result_obj$ensembl <- mapIds(x = org.Mm.eg.db,
+                                keys = result_obj$entrez,
+                                column = "ENSEMBL",
+                                keytype = "ENTREZID",
+                                multiVals = "first")
+
+  result_list[[i]] <- result_obj
+
+  assign(paste0("res", i), result_obj)
+}
+
+```
+
+
+### Checking for Known Microglial Gene Expression
+
+```{r}
+
+
+level_order <- c("CTX","HPP","PFC","STR","VTA")
+gene_order  <- c("Cx3cr1|Cx3cr1","Tmem119|Tmem119","Aif1|Aif1","Rbfox3|Rbfox3","Olig2|Olig2")
+
+gene_colors <- c(
+  "Cx3cr1|Cx3cr1"="#7B68EE",
+  "Tmem119|Tmem119"="#FFA500",
+  "Aif1|Aif1"="#20B2AA",
+  "Rbfox3|Rbfox3"="#DC143C",
+  "Olig2|Olig2"="#FFD700"
+)
+
+region_vec <- c("CTX","CTX","CTX","CTX",
+                "HPP","HPP","HPP","HPP","HPP","HPP",
+                "PFC","PFC","PFC","PFC","PFC",
+                "STR","STR","STR","STR","STR",
+                "VTA","VTA","VTA","VTA", "VTA")
+
+get_gene_summary <- function(gene){
+  d2 <- DESeq2::plotCounts(dds, gene=gene, intgroup="condition", returnData=TRUE)
+  d2$region <- factor(region_vec, levels=level_order)
+  data.table::setDT(d2)
+  s <- d2[, .(mean_count = mean(count), sem_count = sd(count)/sqrt(.N)), by=region]
+  s[, gene := gene]
+  s
+}
+
+summaries <- data.table::rbindlist(lapply(gene_order, get_gene_summary))
+summaries[, gene := factor(gene, levels=gene_order)]
+summaries[, region := factor(region, levels=level_order)]
+
+b1 <- 7500
+b2 <- 7800
+
+ymax <- max(summaries$mean_count, na.rm = TRUE)
+
+lower_breaks <- pretty(c(0, b1), n = 5)
+upper_breaks <- pretty(c(b2, ymax), n = 6)
+
+base <- ggplot(summaries, aes(x = gene, y = mean_count, fill = gene)) +
+  geom_bar(stat = "identity", width = 0.75, color = "black") +
+  geom_errorbar(aes(ymin = mean_count - sem_count, ymax = mean_count + sem_count),
+                width = 0.2) +
+  scale_fill_manual(values = gene_colors, name = "Gene") +
+  facet_wrap(~ region, nrow = 1) +
+  theme_bw() +
+  theme(
+    panel.grid.minor = element_blank(),
+    axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)
+  )
+
+p_top <- base +
+  coord_cartesian(ylim = c(b2, ymax * 1.05), expand = FALSE) +
+  scale_y_continuous(breaks = upper_breaks) +
+  labs(title = "Microglial Gene Expression by Region",
+       subtitle = "Mean normalized count ± SEM (axis broken near 7,500)",
+       x = NULL, y = "Mean Normalized Count") +
+  theme(
+    axis.title.x = element_blank(),
+    axis.text.x  = element_blank(),
+    axis.ticks.x = element_blank(),
+    plot.margin  = margin(t = 5, r = 10, b = 0, l = 10)
+  )
+
+p_bot <- base +
+  coord_cartesian(ylim = c(0, b1), expand = FALSE) +
+  scale_y_continuous(breaks = lower_breaks) +
+  labs(x = "Gene", y = "Mean Normalized Count") +
+  theme(
+    plot.margin = margin(t = 0, r = 10, b = 5, l = 10)
+  )
+
+p_final <- p_top / p_bot + plot_layout(heights = c(2.2, 1))
+
+#pdf("output/RNASeq_DEGs/Plots/MicroglialGenes_BarPlots_Final.pdf", width = 8.5, height = 8.5)
+print(p_final)
+#dev.off()
+
+
+```
+
+## UpSet Plots
+
+```{r}
+
+region_colors <- c(
+  "Cortex" = "#FF9289", 
+  "Hippocampus" = "#FF8AFF", 
+  "PreFrontalCortex" = "#00DB98", 
+  "Striatum" = "#00CBFF", 
+  "VTA" = "#BEC100"
+)
+
+comparison_regions <- c(
+  HPP_vs_CTX = "HPP_vs_CTX",
+  PFC_vs_CTX = "PFC_vs_CTX",
+  STR_vs_PFC = "STR_vs_PFC",
+  STR_vs_CTX = "STR_vs_CTX",
+  HPP_vs_STR = "HPP_vs_STR",
+  HPP_vs_VTA = "HPP_vs_VTA",
+  STR_vs_VTA = "STR_vs_VTA",
+  PFC_vs_VTA = "PFC_vs_VTA",
+  CTX_vs_VTA = "CTX_vs_VTA",
+  HPP_vs_PFC = "HPP_vs_PFC"
+)
+
+get_up_genes <- function(res) {
+  rownames(subset(res, padj < 0.05 & log2FoldChange > 0))
+}
+
+get_down_genes <- function(res) {
+  rownames(subset(res, padj < 0.05 & log2FoldChange < 0))
+}
+
+deg_lists_up <- list(
+  HPP_vs_CTX = get_up_genes(res1),
+  PFC_vs_CTX  = get_up_genes(res2),
+  STR_vs_PFC = get_up_genes(res3),
+  STR_vs_CTX  = get_up_genes(res4),
+  HPP_vs_STR = get_up_genes(res5),
+  HPP_vs_VTA = get_up_genes(res6),
+  STR_vs_VTA = get_up_genes(res7),
+  PFC_vs_VTA = get_up_genes(res8),
+  CTX_vs_VTA = get_up_genes(res9),
+  HPP_vs_PFC = get_up_genes(res10)
+)
+
+deg_lists_down <- list(
+  HPP_vs_CTX  = get_down_genes(res1),
+  PFC_vs_CTX  = get_down_genes(res2),
+  STR_vs_PFC = get_down_genes(res3),
+  STR_vs_CTX  = get_down_genes(res4),
+  HPP_vs_STR = get_down_genes(res5),
+  HPP_vs_VTA = get_down_genes(res6),
+  STR_vs_VTA = get_down_genes(res7),
+  PFC_vs_VTA = get_down_genes(res8),
+  CTX_vs_VTA = get_down_genes(res9),
+  HPP_vs_PFC = get_down_genes(res10)
+)
+
+all_genes_up <- unique(unlist(deg_lists_up))
+up_mat <- as.data.frame(sapply(deg_lists_up, function(g) all_genes_up %in% g))
+rownames(up_mat) <- all_genes_up
+
+all_genes_down <- unique(unlist(deg_lists_down))
+down_mat <- as.data.frame(sapply(deg_lists_down, function(g) all_genes_down %in% g))
+rownames(down_mat) <- all_genes_down
+
+up_mat_tbl <- as_tibble(up_mat)
+down_mat_tbl <- as_tibble(down_mat)
+
+UpSetUpregulated <- upset(
+  up_mat_tbl,
+  min_size=15,
+  intersect = colnames(up_mat_tbl),
+  name = "Upregulated Genes",
+  base_annotations = list("Intersection size" = intersection_size()),
+  height_ratio = 0.5,
+  width_ratio = 0.25
+) +
+  theme_bw(base_size = 4) +  
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 12),
+    axis.text.y = element_text(size = 12),  
+    plot.title = element_text(size = 16, face = "bold"),
+    plot.subtitle = element_text(size = 14),
+    legend.text = element_text(size = 12),
+    legend.title = element_text(size = 13, face = "bold")
+  ) +
+  labs(
+    title = "Upregulated DEGs Across Brain Regions",
+    subtitle = "Significant genes (padj < 0.05, log2FC > 0)",
+    x = "Comparison",
+    y = "Intersection Size"
+  )
+
+
+
+UpSetDownregulated <-upset(
+  down_mat_tbl,
+  min_size=15,
+  intersect = colnames(down_mat_tbl),
+  name = "Downregulated Genes",
+  base_annotations = list("Intersection size" = intersection_size()),
+  height_ratio = 1,
+  width_ratio = 0.25
+) +
+
+  theme_bw(base_size = 4) + 
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 12),
+    axis.text.y = element_text(size = 12),  
+    plot.title = element_text(size = 16, face = "bold"),
+    plot.subtitle = element_text(size = 14),
+    legend.text = element_text(size = 12),
+    legend.title = element_text(size = 13, face = "bold")
+  ) +
+  labs(
+    title = "Downregulated DEGs Across Brain Regions",
+    subtitle = "Significant genes (padj < 0.05, log2FC < 0 )",
+    x = "Comparison",
+    y = "Intersection Size"
+  )
+
+
+#pdf("output/RNASeq_DEGs/Plots/BRMic_Upset_RNASeq_DEGs_Upregulated_Downregulated_Final.pdf", width = 8, height = 8)
+
+UpSetUpregulated
+
+UpSetDownregulated
+
+#dev.off()
+```
+
+## Subset and Analyze Significant Results {.tabset}
+
+```{r Subset Significant Results, echo=TRUE, message=FALSE, warning=FALSE, results='asis'}
+results_sig1 <- subset(res1, padj < 0.05)
+results_sig2 <- subset(res2, padj < 0.05)
+results_sig3 <- subset(res3, padj < 0.05)
+results_sig4 <- subset(res4, padj < 0.05)
+results_sig5 <- subset(res5, padj < 0.05)
+results_sig6 <- subset(res6, padj < 0.05)
+results_sig7 <- subset(res7, padj < 0.05)
+results_sig8 <- subset(res8, padj < 0.05)
+results_sig9 <- subset(res9, padj < 0.05)
+results_sig10 <- subset(res10, padj < 0.05)
+```
+
+### HPP vs CTX
+
+```{r echo=FALSE}
+kable((head(results_sig1,20)), caption = "Significant DEGs Hippocampus vs Cortex", format = "html", align = "l", booktabs=TRUE) %>% kable_styling(html_font = "Arial", font_size = 10, bootstrap_options = c("striped", "hover", "condensed", "responsive")) %>% scroll_box(width = "1000px", height = "500px")
+```
+
+### PFC vs CTX
+
+```{r echo=FALSE}
+kable((head(results_sig2,20)), caption = "Significant DEGs PreFrontalCortex vs Cortex", format = "html", align = "l", booktabs=TRUE) %>% kable_styling(html_font = "Arial", font_size = 10, bootstrap_options = c("striped", "hover", "condensed", "responsive")) %>% scroll_box(width = "1000px", height = "500px")
+
+```
+
+### STR vs PFC
+
+```{r echo=FALSE}
+kable((head(results_sig3,20)), caption = "Significant Striatum vs PreFrontalCortex", format = "html", align = "l", booktabs=TRUE) %>% kable_styling(html_font = "Arial", font_size = 10, bootstrap_options = c("striped", "hover", "condensed", "responsive"))%>% scroll_box(width = "1000px", height = "500px")
+
+```
+
+### STR vs CTX
+
+```{r echo=FALSE}
+kable((head(results_sig4,20)), caption = "Significant DEGs Striatum vs Cortex", format = "html", align = "l", booktabs=TRUE) %>% kable_styling(html_font = "Arial", font_size = 10, bootstrap_options = c("striped", "hover", "condensed", "responsive")) %>% scroll_box(width = "1000px", height = "500px")
+```
+
+### HPP vs STR
+
+```{r echo=FALSE}
+kable((head(results_sig5,20)), caption = "Significant DEGs Hippocampus vs Striatum", format = "html", align = "l", booktabs=TRUE) %>% kable_styling(html_font = "Arial", font_size = 10, bootstrap_options = c("striped", "hover", "condensed", "responsive")) %>% scroll_box(width = "1000px", height = "500px")
+
+```
+
+### HPP vs VTA
+
+```{r echo=FALSE}
+kable((head(results_sig6,20)), caption = "Significant Hippocampus vs VTA", format = "html", align = "l", booktabs=TRUE) %>% kable_styling(html_font = "Arial", font_size = 10, bootstrap_options = c("striped", "hover", "condensed", "responsive"))%>% scroll_box(width = "1000px", height = "500px")
+```
+
+### STR vs VTA
+
+```{r echo=FALSE}
+kable((head(results_sig7,20)), caption = "Significant DEGs Striatum vs VTA", format = "html", align = "l", booktabs=TRUE) %>% kable_styling(html_font = "Arial", font_size = 10, bootstrap_options = c("striped", "hover", "condensed", "responsive")) %>% scroll_box(width = "1000px", height = "500px")
+```
+
+### PFC vs VTA
+
+```{r echo=FALSE}
+kable((head(results_sig8,20)), caption = "Significant DEGs PreFrontalCortex vs VTA", format = "html", align = "l", booktabs=TRUE) %>% kable_styling(html_font = "Arial", font_size = 10, bootstrap_options = c("striped", "hover", "condensed", "responsive")) %>% scroll_box(width = "1000px", height = "500px")
+```
+
+### CTX vs VTA
+
+```{r echo=FALSE}
+kable((head(results_sig9,20)), caption = "Significant DEGs Cortex vs VTA", format = "html", align = "l", booktabs=TRUE) %>% kable_styling(html_font = "Arial", font_size = 10, bootstrap_options = c("striped", "hover", "condensed", "responsive")) %>% scroll_box(width = "1000px", height = "500px")
+```
+
+### HPP vs PFC
+
+```{r echo=FALSE}
+kable((head(results_sig10,20)), caption = "Significant DEGs Hippocampus vs PreFrontalCortex", format = "html", align = "l", booktabs=TRUE) %>% kable_styling(html_font = "Arial", font_size = 10, bootstrap_options = c("striped", "hover", "condensed", "responsive")) %>% scroll_box(width = "1000px", height = "500px")
+```
+
+
+```{r eval=FALSE, include=FALSE}
+# Not run, but useful for individual results comparisons
+print_output <- function(output, cex = 0.7) {
+  tmp <- capture.output(output)
+  plot.new()
+  text(0, 1, paste(tmp, collapse='\n'), adj = c(0,1), family = 'mono', cex = cex)
+  box()
+}
+
+pdf("output/RNASeq_DEGs/SummaryTables_ResSigDESEQR_Final.pdf")
+print_output(c("Results Sig 1: Significant DEGs Hippocampus vs Cortex", summary(results_sig1, alpha = 0.05)))
+print_output(c("Results Sig 2: Significant DEGs PreFrontalCortex vs Cortex", summary(results_sig2, alpha = 0.05)))
+print_output(c("Results Sig 3: Significant Striatum vs PreFrontalCortex", summary(results_sig3, alpha = 0.05)))
+print_output(c("Results Sig 4: Significant DEGs Striatum vs Cortex", summary(results_sig4, alpha = 0.05)))
+print_output(c("Results Sig 5: Significant DEGs Hippocampus vs Striatum", summary(results_sig5, alpha = 0.05)))
+print_output(c("Results Sig 6: Significant Hippocampus vs VTA", summary(results_sig6, alpha = 0.05)))
+print_output(c("Results Sig 7: Significant DEGs Striatum vs VTA", summary(results_sig7, alpha = 0.05)))
+print_output(c("Results Sig 8: Significant DEGs PreFrontalCortex vs VTA", summary(results_sig8, alpha = 0.05)))
+print_output(c("Results Sig 9: Significant DEGs Cortex vs VTA", summary(results_sig9, alpha = 0.05)))
+print_output(c("Results Sig 10: Significant DEGs Hippocampus vs PreFrontalCortex", summary(results_sig10, alpha = 0.05)))
+dev.off()
+
+```
+
+```{r Write Sig Res to csv for later Use, eval=FALSE, include=FALSE}
+# Only run once
+
+#write_csv((as.data.frame(results_sig1)), "output/RNASeq_DEGs/Results_Sig_CSVs/Sig_Res_DEGs_HPP_vs_Cortex.csv")
+#write_csv((as.data.frame(results_sig2)), "output/RNASeq_DEGs/Results_Sig_CSVs/Sig_Res_DEGs_PFC_vs_Cortex.csv")
+#write_csv((as.data.frame(results_sig3)), "output/RNASeq_DEGs/Results_Sig_CSVs/Sig_Res_DEGs_STR_vs_PFC.csv")
+#write_csv((as.data.frame(results_sig4)), "output/RNASeq_DEGs/Results_Sig_CSVs/Sig_Res_DEGs_STR_vs_Cortex.csv")
+#write_csv((as.data.frame(results_sig5)), "output/RNASeq_DEGs/Results_Sig_CSVs/Sig_Res_DEGs_HPP_vs_STR.csv")
+#write_csv((as.data.frame(results_sig6)), "output/RNASeq_DEGs/Results_Sig_CSVs/Sig_Res_DEGs_HPP_vs_VTA.csv")
+#write_csv((as.data.frame(results_sig7)), "output/RNASeq_DEGs/Results_Sig_CSVs/Sig_Res_DEGs_STR_vs_VTA.csv")
+#write_csv((as.data.frame(results_sig8)), "output/RNASeq_DEGs/Results_Sig_CSVs/Sig_Res_DEGs_PFC_vs_VTA.csv")
+#write_csv((as.data.frame(results_sig9)), "output/RNASeq_DEGs/Results_Sig_CSVs/Sig_Res_DEGs_CTX_vs_VTA.csv")
+#write_csv((as.data.frame(results_sig10)), "output/RNASeq_DEGs/Results_Sig_CSVs/Sig_Res_DEGs_HPP_vs_PFC.csv")
+
+```
+
+
+## Write all Results to a CSV for Supplement
+
+```{r}
+
+# Define the number of results
+num_results <- 10
+
+# Create a list to store the subsetted and filtered result objects
+results_sig_list <- list()
+
+# Loop through each result object
+for (i in 1:num_results) {
+  # Get the result object name
+  result_name <- paste0("res", i)
+  
+  # Get the DESeq2 result object
+  result_obj <- get(result_name)
+  
+  # Subset the result object based on padj < 0.05
+  subset_result <- subset(result_obj, padj < 0.05)
+  
+  # Check if there are any significant results
+  if (nrow(subset_result) > 0) {
+    # Sort the subsetted result object by log2FoldChange in increasing order
+    sorted_result <- subset_result[order(subset_result$log2FoldChange), ]
+    
+    # Get the bottom 50 (smallest log2FoldChange) and top 50 (largest log2FoldChange)
+    bottom50 <- sorted_result
+    top50 <- sorted_result
+    
+    # Combine the top 50 and bottom 50 rows
+    combined_result <- rbind(top50, bottom50)
+    
+    # Add a new column "result" with the name of the result file
+    combined_result$result <- paste0("results_sig", i)
+    
+    # Store the combined result object in the list
+    results_sig_list[[i]] <- combined_result
+    
+    # Write out the combined result object to a variable with name results_sig_i
+    assign(paste0("results_sig", i), combined_result)
+
+  } else {
+    # If no significant results, store an empty data frame
+    results_sig_list[[i]] <- data.frame()
+  }
+}
+
+# Filter out empty data frames
+filtered_results_sig_list <- results_sig_list[sapply(results_sig_list, nrow) > 0]
+
+# Combining all non-empty results_sig objects into a single data frame (optional)
+if (length(filtered_results_sig_list) > 0) {
+  all_combined_results <- do.call(rbind, filtered_results_sig_list)
+  
+  # Assign the combined results to an environment variable if needed
+  assign("env_variable_combined_results", all_combined_results)
+}
+
+sigres_coded <- c(
+  results_sig1 = "HPP_vs_CTX",
+  results_sig2 = "PFC_vs_CTX",
+  results_sig3 = "STR_vs_PFC",
+  results_sig4 = "STR_vs_CTX",
+  results_sig5 = "HPP_vs_STR",
+  results_sig6 = "HPP_vs_VTA",
+  results_sig7 = "STR_vs_VTA",
+  results_sig8 = "PFC_vs_VTA",
+  results_sig9 = "CTX_vs_VTA",
+  results_sig10 = "HPP_vs_PFC"
+)
+
+
+
+# after you build all_combined_results
+if (exists("all_combined_results")) {
+  all_combined_results$result <- ifelse(
+    all_combined_results$result %in% names(sigres_coded),
+    sigres_coded[all_combined_results$result],
+    all_combined_results$result
+  )
+}
+
+
+all_combined_results <- subset(all_combined_results, select = -ensembl)
+
+
+#write.csv((as.data.frame(all_combined_results)),"output/RNASeq_DEGs/Results_Sig_CSVs/Merged_All_SignifcantResults_DEGs_DEseq2_BRMic.csv", row.names = FALSE)
+
+
+```
+
+## Visualizing Differentially Expressed Genes
+### Principal Components Analysis
+```{r PCA Plots, echo=TRUE, fig.height=6, fig.width=6}
+
+ddsMat_rlog <- rlog(dds, blind = FALSE)
+
+custom_colors <- c("Cortex" = "#FF9289", 
+                   "Hippocampus" = "#FF8AFF", 
+                   "PreFrontalCortex" = "#00DB98", 
+                   "Striatum" = "#00CBFF", 
+                   "VTA" = "#BEC100")
+
+# Plot PCA by column variable (dds)
+#pdf("output/RNASeq_DEGs/Plots/PCA/PCA_Top150geness_RNAseq_Final.pdf", width = 8.13, height = 8.61)
+pcaData2 <- plotPCA(ddsMat_rlog, intgroup = "condition", returnData = TRUE, ntop = 150)
+pcaData2$condition <- factor(pcaData2$condition, levels = c("Cortex", "Hippocampus", "PreFrontalCortex", "Striatum", "VTA"))
+percentVar2 <- round(100 * attr(pcaData2, "percentVar"))
+ggplot(pcaData2, aes(PC1, PC2, color=condition, label = colnames(dds))) +
+  theme_bw() + 
+  geom_point(size = 1) + 
+  scale_y_continuous(limits = c(-50, 50)) +
+  #scale_x_continuous(limits = c(-80, 50)) +
+  xlab(paste0("PC1: ",percentVar2[1],"% variance")) +
+  ylab(paste0("PC2: ",percentVar2[2],"% variance")) + 
+  ggrepel::geom_label_repel(box.padding = 6, max.overlaps = Inf) +
+  coord_fixed() +
+  scale_color_manual(values = custom_colors) + 
+  ggtitle(label = "Principal Component Analysis (PCA)", 
+          subtitle = "Top 150 Genes (rlog transformed)")
+#dev.off()
+
+```
+
+```{r PCA Plots w/o HPP, echo=TRUE, fig.height=6, fig.width=6}
+
+colData_PCA_NoHPP <- read.csv("data/RNASeq_DESeq_Data/sample_info_mic_br.csv", sep = ",", row.names = 1)
+samples_to_remove <- c("MCTX4", "MCTX7", "MVTA6", "MHPP4", "MHPP5", "MHPP6", "MHPP7", "MHPP8", "MHPP9")
+
+colData_PCA_NoHPP <- colData_PCA_NoHPP %>% tibble::rownames_to_column("sample")
+colData_PCA_NoHPP <- colData_PCA_NoHPP %>% dplyr::filter(!sample %in% samples_to_remove)
+colData_PCA_NoHPP <- colData_PCA_NoHPP %>% tibble::column_to_rownames("sample")
+
+
+
+countData_PCA_NoHPP <-as.matrix(read.csv("data/RNASeq_DESeq_Data/gene_count_matrix.csv", row.names = "gene_id"))
+
+
+#all(rownames(colData_PCA_NoHPP) %in% colnames(countData_PCA_NoHPP))
+countData_PCA_NoHPP <- countData_PCA_NoHPP[, rownames(colData_PCA_NoHPP)]
+#all(rownames(colData_PCA_NoHPP) == colnames(countData_PCA_NoHPP))
+
+dds_PCA_NoHPP <- DESeqDataSetFromMatrix(countData = countData_PCA_NoHPP, colData = colData_PCA_NoHPP, design = ~condition)
+
+keep_NOHPP <- rowSums(counts(dds_PCA_NoHPP)) >= 50
+dds_PCA_NoHPP <- dds_PCA_NoHPP[keep_NOHPP,]
+
+
+dds_PCA_NoHPP$condition <- relevel(dds_PCA_NoHPP$condition, ref = "Cortex")
+dds_PCA_NoHPP <- DESeq(dds_PCA_NoHPP)
+
+ddsMat_rlog_PCA_NOHPP <- rlog(dds_PCA_NoHPP, blind = FALSE)
+
+custom_colors_NOHPP <- c("Cortex" = "#FF9289", 
+                   "PreFrontalCortex" = "#00DB98", 
+                   "Striatum" = "#00CBFF", 
+                   "VTA" = "#BEC100")
+
+# Plot PCA by column variable (dds)
+#pdf("output/RNASeq_DEGs/Plots/PCA/PCA_Top150Genes_RNAseq-WithoutHPP.pdf", width = 10, height = 8)
+pcaData_NOHPP <- plotPCA(ddsMat_rlog_PCA_NOHPP, intgroup = "condition", returnData = TRUE, ntop = 150)
+pcaData_NOHPP$condition <- factor(pcaData_NOHPP$condition, levels = c("Cortex", "PreFrontalCortex", "Striatum", "VTA"))
+percentVar_NOHPP <- round(100 * attr(pcaData_NOHPP, "percentVar"))
+ggplot(pcaData_NOHPP, aes(PC1, PC2, color=condition, label = colnames(dds_PCA_NoHPP))) +
+  theme_bw() + 
+  geom_point(size = 2) + 
+  scale_y_continuous(limits = c(-10, 10)) +
+  scale_x_continuous(limits = c(-10, 10)) +
+  xlab(paste0("PC1: ",percentVar_NOHPP[1],"% variance")) +
+  ylab(paste0("PC2: ",percentVar_NOHPP[2],"% variance")) + 
+  ggrepel::geom_label_repel(box.padding = 1, max.overlaps = Inf) +
+  coord_fixed() +
+  scale_color_manual(values = custom_colors_NOHPP) +  
+  ggtitle(label = "Principal Component Analysis (PCA)", 
+          subtitle = "Without HPP Samples Top 150 Genes (rlog transformed)")
+#dev.off()
+
+```
+
+
+```{r Save Normalized Counts, eval=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+## Write table to csv files
+write.table(
+  x = as.data.frame(counts(dds), normalized = T),
+  file = "output/RNASeq_DEGs/BRMic_RNASeq_normalized_counts_DESeq2-Final.txt",
+  sep = "\t",
+  quote = F,
+  col.names = NA
+)
+
+```
+
+
+### Heatmaps of Significantly Differentially Expressed Genes {.tabset}
+
+To generate the heatmaps we use two methods, the first we select genes based on the analysis and the second method utilizes all differentially expressed genes based on a specified cut-off. In our case we select for any significant DEGs with a L2FC \> 1.00 or an L2FC \< -1.00 with a L2FC Standard Error \< 0.50. We then plot these using a wards D correlation clustering method and generate both supervised and unsupervised clusters (by group). Rows are scaled based on a correlation z-score.
+
+```{r eval=FALSE, include=FALSE}
+ressig1 <- as.data.frame(results_sig1)
+ressig2 <- as.data.frame(results_sig2)
+ressig3 <- as.data.frame(results_sig3)
+ressig4 <- as.data.frame(results_sig4)
+ressig5 <- as.data.frame(results_sig5)
+ressig6 <- as.data.frame(results_sig6)
+ressig7 <- as.data.frame(results_sig7)
+ressig8 <- as.data.frame(results_sig8)
+ressig9 <- as.data.frame(results_sig9)
+ressig10 <- as.data.frame(results_sig10)
+
+ressig1$Comparison <- "Hippocampus vs Cortex"
+ressig2$Comparison <- "PreFrontalCortex vs Cortex"
+ressig3$Comparison <- "Striatum vs PreFrontalCortex"
+ressig4$Comparison <- "Striatum vs Cortex"
+ressig5$Comparison <- "Hippocampus vs Striatum"
+ressig6$Comparison <- "Hippocampus vs VTA"
+ressig7$Comparison <- "Striatum vs VTA"
+ressig8$Comparison <- "PreFrontalCortex vs VTA"
+ressig9$Comparison <- "Cortex vs VTA"
+ressig10$Comparison <- "Hippocampus vs PreFrontalCortex"
+
+ressig1_highlfc_pos <- ressig1[ressig1$log2FoldChange >= 0.0, ]
+ressig1_highlfc_neg <- ressig1[ressig1$log2FoldChange <= -0.0, ]
+ressig2_highlfc_pos <- ressig2[ressig2$log2FoldChange >= 0.0, ]
+ressig2_highlfc_neg <- ressig2[ressig2$log2FoldChange <= -0.0, ]
+ressig3_highlfc_pos <- ressig3[ressig3$log2FoldChange >= 0.0, ]
+ressig3_highlfc_neg <- ressig3[ressig3$log2FoldChange <= -0.0, ]
+ressig4_highlfc_pos <- ressig4[ressig4$log2FoldChange >= 0.0, ]
+ressig4_highlfc_neg <- ressig4[ressig4$log2FoldChange <= -0.0, ]
+ressig5_highlfc_pos <- ressig5[ressig5$log2FoldChange >= 0.0, ]
+ressig5_highlfc_neg <- ressig5[ressig5$log2FoldChange <= -0.0, ]
+ressig6_highlfc_pos <- ressig6[ressig6$log2FoldChange >= 0.0, ]
+ressig6_highlfc_neg <- ressig6[ressig6$log2FoldChange <= -0.0, ]
+ressig7_highlfc_pos <- ressig7[ressig7$log2FoldChange >= 0.0, ]
+ressig7_highlfc_neg <- ressig7[ressig7$log2FoldChange <= -0.0, ]
+ressig8_highlfc_pos <- ressig8[ressig8$log2FoldChange >= 0.0, ]
+ressig8_highlfc_neg <- ressig8[ressig8$log2FoldChange <= -0.0, ]
+ressig9_highlfc_pos <- ressig9[ressig9$log2FoldChange >= 0.0, ]
+ressig9_highlfc_neg <- ressig9[ressig9$log2FoldChange <= -0.0, ]
+ressig10_highlfc_pos <- ressig10[ressig10$log2FoldChange >= 0.0, ]
+ressig10_highlfc_neg <- ressig10[ressig10$log2FoldChange <= -0.0, ]
+
+temp_sigdegshm <- rbind(ressig1_highlfc_pos, ressig1_highlfc_neg)
+temp_sigdegshm2 <- rbind(temp_sigdegshm, ressig2_highlfc_pos)
+temp_sigdegshm3 <- rbind(temp_sigdegshm2, ressig2_highlfc_neg)
+temp_sigdegshm4 <- rbind(temp_sigdegshm3, ressig3_highlfc_pos)
+temp_sigdegshm5 <- rbind(temp_sigdegshm4, ressig3_highlfc_neg)
+temp_sigdegshm6 <- rbind(temp_sigdegshm5, ressig4_highlfc_pos)
+temp_sigdegshm7 <- rbind(temp_sigdegshm6, ressig4_highlfc_neg)
+temp_sigdegshm8 <- rbind(temp_sigdegshm7, ressig5_highlfc_pos)
+temp_sigdegshm9 <- rbind(temp_sigdegshm8, ressig5_highlfc_neg)
+temp_sigdegshm10 <- rbind(temp_sigdegshm9, ressig6_highlfc_pos)
+temp_sigdegshm11 <- rbind(temp_sigdegshm10, ressig6_highlfc_neg)
+temp_sigdegshm12 <- rbind(temp_sigdegshm11, ressig7_highlfc_pos)
+temp_sigdegshm13 <- rbind(temp_sigdegshm12, ressig7_highlfc_neg)
+temp_sigdegshm14 <- rbind(temp_sigdegshm13, ressig8_highlfc_pos)
+temp_sigdegshm15 <- rbind(temp_sigdegshm14, ressig8_highlfc_neg)
+temp_sigdegshm16 <- rbind(temp_sigdegshm15, ressig9_highlfc_pos)
+temp_sigdegshm17 <- rbind(temp_sigdegshm16, ressig9_highlfc_neg)
+temp_sigdegshm18 <- rbind(temp_sigdegshm17, ressig10_highlfc_pos)
+temp_sigdegshm19 <- rbind(temp_sigdegshm18, ressig10_highlfc_neg)
+
+
+temp_sigdegshm20 <- temp_sigdegshm19[temp_sigdegshm19$lfcSE <=20000000, ]
+
+dup_rows <- duplicated(temp_sigdegshm20$symbol)
+data_dedup <- temp_sigdegshm20[!dup_rows, ]
+
+rows <- rownames(data_dedup)
+
+select <- order(rowMeans(counts(dds, normalized = TRUE)),
+decreasing = TRUE)
+
+mat <- assay(ddsMat_rlog)[select, ]
+
+data_mod <- mat[rownames(mat) %in% rows, ]
+
+matrownames_data_mod <- data.frame(rownames(data_mod))
+matrownames_data_mod <- matrownames_data_mod %>% separate(rownames.data_mod., c("id", "symbol"), sep = "([|])")
+
+samples <- colData
+samples <- samples %>% tibble::rownames_to_column("sample")
+annot_col <- samples %>%
+column_to_rownames("sample") %>%
+as.data.frame()
+
+ann_colors <- list(
+condition = as.factor(c(Cortex = "slateblue2", Hippocampus = "limegreen", PreFrontalCortex = "cyan", Striatum = "red", VTA = "violetred2")),
+Group = as.factor(c(Cortex = "slateblue2", Hippocampus = "limegreen", PreFrontalCortex = "cyan", Striatum = "red", VTA = "violetred2")))
+
+```
+
+
+
+```{r eval=FALSE, include=FALSE}
+pheatmap::pheatmap(
+mat = data_mod,
+color = colorRampPalette(rev(brewer.pal(11, "RdYlBu")))(155),
+scale = "row",
+annotation_col = annot_col,
+fontsize = 12,
+show_colnames = F,
+cluster_rows = T,
+cluster_cols = F,
+annotation_legend = T,
+legend = T,
+show_rownames = F,
+clustering_distance_rows = "correlation",
+clustering_method = "ward.D",
+main = "Heatmap of Unfiltered Significant DEGs -- Supervised and Condensed",
+cluster_row_slices = TRUE,
+show_row_dend = FALSE,
+gaps_col = c(4, 10, 15, 20),
+cutree_rows = 4,
+cutree_cols = 3,
+treeheight_row = 15,
+treeheight_col = 10)
+#filename = "output/RNASeq_DEGs/Plots/Heatmaps/BRMIC_Heatmap_DEGs_Final_Supervised_Nolabs_Condensed_UnFiltered.pdf")
+```
+
+
+```{r eval=FALSE, include=FALSE}
+pheatmap::pheatmap(
+mat = data_mod,
+color = colorRampPalette(rev(brewer.pal(11, "RdYlBu")))(160),
+scale = "row",
+annotation_col = annot_col,
+fontsize = 12,
+show_colnames = F,
+cluster_rows = T,
+cluster_cols = T,
+annotation_legend = T,
+legend = T,
+show_rownames = F,
+clustering_distance_rows = "correlation",
+clustering_method = "ward.D",
+main = "Heatmap of Unfiltered Significant DEGs -- Unsupervised and Condensed",
+cluster_row_slices = TRUE,
+show_row_dend = FALSE,
+gaps_col = c(4, 10, 15, 20),
+cutree_rows = 4,
+cutree_cols = 3,
+treeheight_row = 15,
+treeheight_col = 10)
+#filename = "output/RNASeq_DEGs/Plots/Heatmaps/BRMIC_Heatmap_DEGs_Final_Unsupervised_Nolabs_Condensed_UnFiltered.pdf")
+
+```
+
+```{r}
+ressig1 <- as.data.frame(results_sig1)
+ressig2 <- as.data.frame(results_sig2)
+ressig3 <- as.data.frame(results_sig3)
+ressig4 <- as.data.frame(results_sig4)
+ressig5 <- as.data.frame(results_sig5)
+ressig6 <- as.data.frame(results_sig6)
+ressig7 <- as.data.frame(results_sig7)
+ressig8 <- as.data.frame(results_sig8)
+ressig9 <- as.data.frame(results_sig9)
+ressig10 <- as.data.frame(results_sig10)
+
+ressig1$Comparison <- "Hippocampus vs Cortex"
+ressig2$Comparison <- "PreFrontalCortex vs Cortex"
+ressig3$Comparison <- "Striatum vs PreFrontalCortex"
+ressig4$Comparison <- "Striatum vs Cortex"
+ressig5$Comparison <- "Hippocampus vs Striatum"
+ressig6$Comparison <- "Hippocampus vs VTA"
+ressig7$Comparison <- "Striatum vs VTA"
+ressig8$Comparison <- "PreFrontalCortex vs VTA"
+ressig9$Comparison <- "Cortex vs VTA"
+ressig10$Comparison <- "Hippocampus vs PreFrontalCortex"
+
+ressig1_highlfc_pos <- ressig1[ressig1$log2FoldChange >= 1.0 , ]
+ressig1_highlfc_neg <- ressig1[ressig1$log2FoldChange <= -1.0 , ]
+ressig2_highlfc_pos <- ressig2[ressig2$log2FoldChange >= 1.0 , ]
+ressig2_highlfc_neg <- ressig2[ressig2$log2FoldChange <= -1.0 , ]
+ressig3_highlfc_pos <- ressig3[ressig3$log2FoldChange >= 1.0 , ]
+ressig3_highlfc_neg <- ressig3[ressig3$log2FoldChange <= -1.0 , ]
+ressig4_highlfc_pos <- ressig4[ressig4$log2FoldChange >= 1.0 , ]
+ressig4_highlfc_neg <- ressig4[ressig4$log2FoldChange <= -1.0 , ]
+ressig5_highlfc_pos <- ressig5[ressig5$log2FoldChange >= 1.0 , ]
+ressig5_highlfc_neg <- ressig5[ressig5$log2FoldChange <= -1.0 , ]
+ressig6_highlfc_pos <- ressig6[ressig6$log2FoldChange >= 1.0 , ]
+ressig6_highlfc_neg <- ressig6[ressig6$log2FoldChange <= -1.0 , ]
+ressig7_highlfc_pos <- ressig7[ressig7$log2FoldChange >= 1.0 , ]
+ressig7_highlfc_neg <- ressig7[ressig7$log2FoldChange <= -1.0 , ]
+ressig8_highlfc_pos <- ressig8[ressig8$log2FoldChange >= 1.0 , ]
+ressig8_highlfc_neg <- ressig8[ressig8$log2FoldChange <= -1.0 , ]
+ressig9_highlfc_pos <- ressig9[ressig9$log2FoldChange >= 1.0 , ]
+ressig9_highlfc_neg <- ressig9[ressig9$log2FoldChange <= -1.0 , ]
+ressig10_highlfc_pos <- ressig10[ressig10$log2FoldChange >= 1.0 , ]
+ressig10_highlfc_neg <- ressig10[ressig10$log2FoldChange <= -1.0 , ]
+
+
+temp_sigdegshm <- rbind(ressig1_highlfc_pos, ressig1_highlfc_neg)
+temp_sigdegshm2 <- rbind(temp_sigdegshm, ressig2_highlfc_pos)
+temp_sigdegshm3 <- rbind(temp_sigdegshm2, ressig2_highlfc_neg)
+temp_sigdegshm4 <- rbind(temp_sigdegshm3, ressig3_highlfc_pos)
+temp_sigdegshm5 <- rbind(temp_sigdegshm4, ressig3_highlfc_neg)
+temp_sigdegshm6 <- rbind(temp_sigdegshm5, ressig4_highlfc_pos)
+temp_sigdegshm7 <- rbind(temp_sigdegshm6, ressig4_highlfc_neg)
+temp_sigdegshm8 <- rbind(temp_sigdegshm7, ressig5_highlfc_pos)
+temp_sigdegshm9 <- rbind(temp_sigdegshm8, ressig5_highlfc_neg)
+temp_sigdegshm10 <- rbind(temp_sigdegshm9, ressig6_highlfc_pos)
+temp_sigdegshm11 <- rbind(temp_sigdegshm10, ressig6_highlfc_neg)
+temp_sigdegshm12 <- rbind(temp_sigdegshm11, ressig7_highlfc_pos)
+temp_sigdegshm13 <- rbind(temp_sigdegshm12, ressig7_highlfc_neg)
+temp_sigdegshm14 <- rbind(temp_sigdegshm13, ressig8_highlfc_pos)
+temp_sigdegshm15 <- rbind(temp_sigdegshm14, ressig8_highlfc_neg)
+temp_sigdegshm16 <- rbind(temp_sigdegshm15, ressig9_highlfc_pos)
+temp_sigdegshm17 <- rbind(temp_sigdegshm16, ressig9_highlfc_neg)
+temp_sigdegshm18 <- rbind(temp_sigdegshm17, ressig10_highlfc_pos)
+temp_sigdegshm19 <- rbind(temp_sigdegshm18, ressig10_highlfc_neg)
+
+temp_sigdegshm20 <- temp_sigdegshm19[temp_sigdegshm19$lfcSE <=0.5, ]
+
+dup_rows <- duplicated(temp_sigdegshm20$symbol)
+data_dedup <- temp_sigdegshm20[!dup_rows, ]
+
+rows <- rownames(data_dedup)
+
+select <- order(rowMeans(counts(dds, normalized = TRUE)),
+decreasing = TRUE)
+
+mat <- assay(ddsMat_rlog)[select, ]
+
+data_mod <- mat[rownames(mat) %in% rows, ]
+
+matrownames_data_mod <- data.frame(rownames(data_mod))
+matrownames_data_mod <- matrownames_data_mod %>% separate(rownames.data_mod., c("id", "symbol"), sep = "([|])")
+
+samples <- colData
+samples <- samples %>% tibble::rownames_to_column("sample")
+annot_col <- samples %>%
+column_to_rownames("sample") %>%
+as.data.frame()
+
+ann_colors <- list(
+condition = as.factor(c(Cortex = "slateblue2", Hippocampus = "limegreen", PreFrontalCortex = "cyan", Striatum = "red", VTA = "violetred2")),
+Group = as.factor(c(Cortex = "slateblue2", Hippocampus = "limegreen", PreFrontalCortex = "cyan", Striatum = "red", VTA = "violetred2")))
+```
+
+#### Supervised and Condensed DEGs All
+
+```{r echo=FALSE, fig.height=8, fig.width=8}
+pheatmap::pheatmap(
+mat = data_mod,
+color = colorRampPalette(rev(brewer.pal(11, "RdYlBu")))(255),
+scale = "row",
+annotation_col = annot_col,
+fontsize = 12,
+show_colnames = F,
+cluster_rows = T,
+cluster_cols = F,
+annotation_legend = T,
+legend = T,
+show_rownames = F,
+clustering_distance_rows = "correlation",
+clustering_method = "ward.D",
+main = "Heatmap of Filtered Significant DEGs (L2FC > 1, LFCSE < 0.5) -- Supervised and Condensed",
+cluster_row_slices = TRUE,
+show_row_dend = FALSE,
+gaps_col = c(4, 10, 15, 20),
+cutree_rows = 4,
+cutree_cols = 3,
+treeheight_row = 15,
+treeheight_col = 10)
+#filename = "output/RNASeq_DEGs/Plots/Heatmaps/BRMIC_Heatmap_DEGs_1_00L2fc_0.5L2fcSE_Supervised_Nolabs_Condensed--FilteredFinal.pdf")
+```
+
+#### Unupervised and Condensed DEGs All
+
+```{r echo=FALSE, fig.height=8, fig.width=8}
+pheatmap::pheatmap(
+mat = data_mod,
+color = colorRampPalette(rev(brewer.pal(11, "RdYlBu")))(250),
+scale = "row",
+annotation_col = annot_col,
+fontsize = 12,
+show_colnames = F,
+cluster_rows = T,
+cluster_cols = T,
+annotation_legend = T,
+legend = T,
+show_rownames = F,
+clustering_distance_rows = "correlation",
+clustering_method = "ward.D",
+main = "Heatmap of Filtered Significant DEGs (L2FC > 1, LFCSE < 0.5) -- Unsupervised and Condensed",
+cluster_row_slices = TRUE,
+show_row_dend = FALSE,
+gaps_col = c(4, 10, 15, 20),
+cutree_rows = 4,
+cutree_cols = 3,
+treeheight_row = 15,
+treeheight_col = 10)
+#filename = "output/RNASeq_DEGs/Plots/Heatmaps/BRMIC_Heatmap_DEGs_1_00L2fc_0.5L2fcSE_Unsupervised_Nolabs_Condensed--FilteredFinal.pdf")
+
+```
+
+
+
+## Gene Ontology Analysis {.tabset}
+To generate GO analysis we first created a background of genes using any genes that met the original DESEQ2 filtering criteria of \> 50 genes counts per row and having a mappable entrez ID. This generates the necessary background to ensure that we are not just detecting microlgial pathways as we are utilizing this specific cell type. We then filter our genes that have L2FC \< -1 or L2FC \> 1 to determine directionality of the affected GO pathways. GO enrich is then used to conduct the pathway analysis utiziling the entrez IDs as inputs and an "FDR" multiple testing correction.
+
+```{r}
+## Gene Ontology Analysis
+# Generate Background for KEGG/GO
+
+
+background_mm10 <- subset(res1, is.na(entrez) == FALSE)
+gene_matrix_background <- unique(sort(background_mm10$entrez))
+
+# Remove any genes that do not have any entrez identifiers
+
+results_sig_entrez <- subset(results_sig1, is.na(entrez) == FALSE)
+results_sig_entrez2 <- subset(results_sig2, is.na(entrez) == FALSE)
+results_sig_entrez3 <- subset(results_sig3, is.na(entrez) == FALSE)
+results_sig_entrez4 <- subset(results_sig4, is.na(entrez) == FALSE)
+results_sig_entrez5 <- subset(results_sig5, is.na(entrez) == FALSE)
+results_sig_entrez6 <- subset(results_sig6, is.na(entrez) == FALSE)
+results_sig_entrez7 <- subset(results_sig7, is.na(entrez) == FALSE)
+results_sig_entrez8 <- subset(results_sig8, is.na(entrez) == FALSE)
+results_sig_entrez9 <- subset(results_sig9, is.na(entrez) == FALSE)
+results_sig_entrez10 <- subset(results_sig10, is.na(entrez) == FALSE)
+
+# Create a matrix of gene log2 fold changes
+gene_matrix <- results_sig_entrez$log2FoldChange
+gene_matrix2 <- results_sig_entrez2$log2FoldChange
+gene_matrix3 <- results_sig_entrez3$log2FoldChange
+gene_matrix4 <- results_sig_entrez4$log2FoldChange
+gene_matrix5 <- results_sig_entrez5$log2FoldChange
+gene_matrix6 <- results_sig_entrez6$log2FoldChange
+gene_matrix7 <- results_sig_entrez7$log2FoldChange
+gene_matrix8 <- results_sig_entrez8$log2FoldChange
+gene_matrix9 <- results_sig_entrez9$log2FoldChange
+gene_matrix10 <- results_sig_entrez10$log2FoldChange
+
+# Add the entrezID's as names for each logFC entry
+names(gene_matrix) <- results_sig_entrez$entrez
+names(gene_matrix2) <- results_sig_entrez2$entrez
+names(gene_matrix3) <- results_sig_entrez3$entrez
+names(gene_matrix4) <- results_sig_entrez4$entrez
+names(gene_matrix5) <- results_sig_entrez5$entrez
+names(gene_matrix6) <- results_sig_entrez6$entrez
+names(gene_matrix7) <- results_sig_entrez7$entrez
+names(gene_matrix8) <- results_sig_entrez8$entrez
+names(gene_matrix9) <- results_sig_entrez9$entrez
+names(gene_matrix10) <- results_sig_entrez10$entrez
+
+
+
+# Pull only the Enriched samples from either side  (<1 LFC)
+gene_matrix_enrich <- gene_matrix[which(gene_matrix > 1)]
+gene_matrix_enrich2 <- gene_matrix2[which(gene_matrix2 > 1)]
+gene_matrix_enrich3 <- gene_matrix3[which(gene_matrix3 > 1)]
+gene_matrix_enrich4 <- gene_matrix4[which(gene_matrix4 > 1)]
+gene_matrix_enrich5 <- gene_matrix5[which(gene_matrix5 > 1)]
+gene_matrix_enrich6 <- gene_matrix6[which(gene_matrix6 > 1)]
+gene_matrix_enrich7 <- gene_matrix7[which(gene_matrix7 > 1)]
+gene_matrix_enrich8 <- gene_matrix8[which(gene_matrix8 > 1)]
+gene_matrix_enrich9 <- gene_matrix9[which(gene_matrix9 > 1)]
+gene_matrix_enrich10 <- gene_matrix10[which(gene_matrix10 > 1)]
+gene_matrix_enrich11 <- gene_matrix[which(gene_matrix < -1)]
+gene_matrix_enrich12 <- gene_matrix2[which(gene_matrix2 < -1)]
+gene_matrix_enrich13 <- gene_matrix3[which(gene_matrix3 < -1)]
+gene_matrix_enrich14 <- gene_matrix4[which(gene_matrix4 < -1)]
+gene_matrix_enrich15 <- gene_matrix5[which(gene_matrix5 < -1)]
+gene_matrix_enrich16 <- gene_matrix6[which(gene_matrix6 < -1)]
+gene_matrix_enrich17 <- gene_matrix7[which(gene_matrix7 < -1)]
+gene_matrix_enrich18 <- gene_matrix8[which(gene_matrix8 < -1)]
+gene_matrix_enrich19 <- gene_matrix9[which(gene_matrix9 < -1)]
+gene_matrix_enrich20 <- gene_matrix10[which(gene_matrix10 < -1)]
+
+
+go_enrich1 <- enrichGO(gene = names(gene_matrix_enrich),
+                      OrgDb = 'org.Mm.eg.db', 
+                      readable = T,
+                      universe = gene_matrix_background,
+                      ont = "ALL",
+                      pAdjustMethod = "fdr",
+                      pvalueCutoff = 0.05, 
+                      qvalueCutoff = 0.05)
+
+go_enrich2 <- enrichGO(gene = names(gene_matrix_enrich2),
+                      OrgDb = 'org.Mm.eg.db', 
+                      readable = T,
+                      universe = gene_matrix_background,
+                      ont = "ALL",
+                      pAdjustMethod = "fdr",
+                      pvalueCutoff = 0.05, 
+                      qvalueCutoff = 0.05)
+
+go_enrich3 <- enrichGO(gene = names(gene_matrix_enrich3),
+                      OrgDb = 'org.Mm.eg.db', 
+                      readable = T,
+                      universe = gene_matrix_background,
+                      ont = "ALL",
+                      pAdjustMethod = "fdr",
+                      pvalueCutoff = 0.05, 
+                      qvalueCutoff = 0.05)
+
+go_enrich4 <- enrichGO(gene = names(gene_matrix_enrich4),
+                      OrgDb = 'org.Mm.eg.db', 
+                      readable = T,
+                      universe = gene_matrix_background,
+                      ont = "ALL",
+                      pAdjustMethod = "fdr",
+                      pvalueCutoff = 0.05, 
+                      qvalueCutoff = 0.05)
+
+go_enrich5 <- enrichGO(gene = names(gene_matrix_enrich5),
+                      OrgDb = 'org.Mm.eg.db', 
+                      readable = T,
+                      universe = gene_matrix_background,
+                      ont = "ALL",
+                      pAdjustMethod = "fdr",
+                      pvalueCutoff = 0.05, 
+                      qvalueCutoff = 0.05)
+
+go_enrich6 <- enrichGO(gene = names(gene_matrix_enrich6),
+                      OrgDb = 'org.Mm.eg.db', 
+                      readable = T,
+                      universe = gene_matrix_background,
+                      ont = "ALL",
+                      pAdjustMethod = "fdr",
+                      pvalueCutoff = 0.05, 
+                      qvalueCutoff = 0.05)
+
+go_enrich7 <- enrichGO(gene = names(gene_matrix_enrich7),
+                      OrgDb = 'org.Mm.eg.db', 
+                      readable = T,
+                      universe = gene_matrix_background,
+                      ont = "ALL",
+                      pAdjustMethod = "fdr",
+                      pvalueCutoff = 0.05, 
+                     qvalueCutoff = 0.05)
+
+go_enrich8 <- enrichGO(gene = names(gene_matrix_enrich8),
+                      OrgDb = 'org.Mm.eg.db', 
+                      readable = T,
+                      universe = gene_matrix_background,
+                      ont = "ALL",
+                      pAdjustMethod = "fdr",
+                      pvalueCutoff = 0.05, 
+                      qvalueCutoff = 0.05)
+
+go_enrich9 <- enrichGO(gene = names(gene_matrix_enrich9),
+                      OrgDb = 'org.Mm.eg.db', 
+                      readable = T,
+                      universe = gene_matrix_background,
+                      ont = "ALL",
+                      pAdjustMethod = "fdr",
+                      pvalueCutoff = 0.05, 
+                      qvalueCutoff = 0.05)
+
+go_enrich10 <- enrichGO(gene = names(gene_matrix_enrich10),
+                      OrgDb = 'org.Mm.eg.db', 
+                      readable = T,
+                      universe = gene_matrix_background,
+                      ont = "ALL",
+                      pAdjustMethod = "fdr",
+                      pvalueCutoff = 0.05, 
+                      qvalueCutoff = 0.05)
+
+go_enrich11 <- enrichGO(gene = names(gene_matrix_enrich11),
+                      OrgDb = 'org.Mm.eg.db', 
+                      readable = T,
+                      universe = gene_matrix_background,
+                      ont = "ALL",
+                      pAdjustMethod = "fdr",
+                      pvalueCutoff = 0.05, 
+                      qvalueCutoff = 0.05)
+
+go_enrich12 <- enrichGO(gene = names(gene_matrix_enrich12),
+                      OrgDb = 'org.Mm.eg.db', 
+                      readable = T,
+                      universe = gene_matrix_background,
+                      ont = "ALL",
+                      pAdjustMethod = "fdr",
+                      pvalueCutoff = 0.05, 
+                      qvalueCutoff = 0.05)
+
+go_enrich13 <- enrichGO(gene = names(gene_matrix_enrich13),
+                      OrgDb = 'org.Mm.eg.db', 
+                      readable = T,
+                      universe = gene_matrix_background,
+                      ont = "ALL",
+                      pAdjustMethod = "fdr",
+                      pvalueCutoff = 0.05, 
+                      qvalueCutoff = 0.05)
+
+go_enrich14 <- enrichGO(gene = names(gene_matrix_enrich14),
+                      OrgDb = 'org.Mm.eg.db', 
+                      readable = T,
+                      universe = gene_matrix_background,
+                      ont = "ALL",
+                      pAdjustMethod = "fdr",
+                      pvalueCutoff = 0.05, 
+                      qvalueCutoff = 0.05)
+
+go_enrich15 <- enrichGO(gene = names(gene_matrix_enrich15),
+                      OrgDb = 'org.Mm.eg.db', 
+                      readable = T,
+                      universe = gene_matrix_background,
+                      ont = "ALL",
+                      pAdjustMethod = "fdr",
+                      pvalueCutoff = 0.05, 
+                      qvalueCutoff = 0.05)
+
+go_enrich16 <- enrichGO(gene = names(gene_matrix_enrich16),
+                      OrgDb = 'org.Mm.eg.db', 
+                      readable = T,
+                      universe = gene_matrix_background,
+                      ont = "ALL",
+                      pAdjustMethod = "fdr",
+                      pvalueCutoff = 0.05, 
+                      qvalueCutoff = 0.05)
+
+go_enrich17 <- enrichGO(gene = names(gene_matrix_enrich17),
+                      OrgDb = 'org.Mm.eg.db', 
+                      readable = T,
+                      universe = gene_matrix_background,
+                      ont = "ALL",
+                      pAdjustMethod = "fdr",
+                      pvalueCutoff = 0.05, 
+                      qvalueCutoff = 0.05)
+
+go_enrich18 <- enrichGO(gene = names(gene_matrix_enrich18),
+                      OrgDb = 'org.Mm.eg.db', 
+                      readable = T,
+                      universe = gene_matrix_background,
+                      ont = "ALL",
+                      pAdjustMethod = "fdr",
+                      pvalueCutoff = 0.05, 
+                      qvalueCutoff = 0.05)
+
+go_enrich19 <- enrichGO(gene = names(gene_matrix_enrich19),
+                      OrgDb = 'org.Mm.eg.db', 
+                      readable = T,
+                      universe = gene_matrix_background,
+                      ont = "ALL",
+                      pAdjustMethod = "fdr",
+                      pvalueCutoff = 0.05, 
+                      qvalueCutoff = 0.05)
+
+go_enrich20 <- enrichGO(gene = names(gene_matrix_enrich20),
+                      OrgDb = 'org.Mm.eg.db', 
+                      readable = T,
+                      universe = gene_matrix_background,
+                      ont = "ALL",
+                      pAdjustMethod = "fdr",
+                      pvalueCutoff = 0.05, 
+                      qvalueCutoff = 0.05)
+
+
+```
+
+```{r eval=FALSE, include=FALSE}
+
+kable(head(go_enrich1,10), caption =  "Top 10 GO Enriched Pathways for HPP vs CTX", format = "html", align = "l", booktabs=TRUE) %>% kable_styling(html_font = "Arial", font_size = 10, bootstrap_options = c("striped", "hover", "condensed", "responsive")) %>% scroll_box(width = "1000px", height = "500px")
+
+kable(head(go_enrich2,10), caption =  "Top 10 GO Enriched Pathways for PFC vs CTX", format = "html", align = "l", booktabs=TRUE) %>% kable_styling(html_font = "Arial", font_size = 10, bootstrap_options = c("striped", "hover", "condensed", "responsive")) %>% scroll_box(width = "1000px", height = "500px")
+
+kable(head(go_enrich3,10), caption =  "Top 10 GO Enriched Pathways for STR vs PFC", format = "html", align = "l", booktabs=TRUE) %>% kable_styling(html_font="Arial", font_size = 10, bootstrap_options = c("striped", "hover", "condensed", "responsive")) %>% scroll_box(width = "1000px", height = "500px")
+
+kable(head(go_enrich4,10), caption =  "Top 10 GO Enriched Pathways for STR vs CTX", format = "html", align = "l", booktabs=TRUE) %>% kable_styling(html_font = "Arial", font_size = 10, bootstrap_options = c("striped", "hover", "condensed", "responsive")) %>% scroll_box(width = "1000px", height = "500px")
+
+kable(head(go_enrich5,10), caption =  "Top 10 GO Enriched Pathways for HPP vs STR", format = "html", align = "l", booktabs=TRUE) %>% kable_styling(html_font = "Arial", font_size = 10, bootstrap_options = c("striped", "hover", "condensed", "responsive")) %>% scroll_box(width = "1000px", height = "500px")
+
+kable(head(go_enrich6,10), caption =  "Top 10 GO Enriched Pathways for HPP vs VTA", format = "html", align = "l", booktabs=TRUE) %>% kable_styling(html_font = "Arial", font_size = 10, bootstrap_options = c("striped", "hover", "condensed", "responsive")) %>% scroll_box(width = "1000px", height = "500px")
+
+kable(head(go_enrich7,10), caption =  "Top 10 GO Enriched Pathways for STR vs VTA", format = "html", align = "l", booktabs=TRUE) %>% kable_styling(html_font = "Arial", font_size = 10, bootstrap_options = c("striped", "hover", "condensed", "responsive")) %>% scroll_box(width = "1000px", height = "500px")
+
+kable(head(go_enrich8,10), caption =  "Top 10 GO Enriched Pathways for PFC vs VTA", format = "html", align = "l", booktabs=TRUE) %>% kable_styling(html_font = "Arial", font_size = 10, bootstrap_options = c("striped", "hover", "condensed", "responsive")) %>% scroll_box(width = "1000px", height = "500px")
+
+kable(head(go_enrich9,10), caption =  "Top 10 GO Enriched Pathways for CTX vs VTA", format = "html", align = "l", booktabs=TRUE) %>% kable_styling(html_font = "Arial", font_size = 10, bootstrap_options = c("striped", "hover", "condensed", "responsive")) %>% scroll_box(width = "1000px", height = "500px")
+
+kable(head(go_enrich10,10), caption =  "Top 10 GO Enriched Pathways for HPP vs PFC", format = "html", align = "l", booktabs=TRUE) %>% kable_styling(html_font = "Arial", font_size = 10, bootstrap_options = c("striped", "hover", "condensed", "responsive")) %>% scroll_box(width = "1000px", height = "500px")
+
+kable(head(go_enrich11,10), caption =  "Top 10 GO Enriched Pathways for CTX vs HPP", format = "html", align = "l", booktabs=TRUE) %>% kable_styling(html_font = "Arial", font_size = 10, bootstrap_options = c("striped", "hover", "condensed", "responsive")) %>% scroll_box(width = "1000px", height = "500px")
+
+kable(head(go_enrich12,10), caption =  "Top 10 GO Enriched Pathways for CTX vs PFC", format = "html", align = "l", booktabs=TRUE) %>% kable_styling(html_font = "Arial", font_size = 10, bootstrap_options = c("striped", "hover", "condensed", "responsive")) %>% scroll_box(width = "1000px", height = "500px")
+
+kable(head(go_enrich13,10), caption =  "Top 10 GO Enriched Pathways for PFC vs STR", format = "html", align = "l", booktabs=TRUE) %>% kable_styling(html_font="Arial", font_size = 10, bootstrap_options = c("striped", "hover", "condensed", "responsive")) %>% scroll_box(width = "1000px", height = "500px")
+
+kable(head(go_enrich14,10), caption =  "Top 10 GO Enriched Pathways for CTX vs STR", format = "html", align = "l", booktabs=TRUE) %>% kable_styling(html_font = "Arial", font_size = 10, bootstrap_options = c("striped", "hover", "condensed", "responsive")) %>% scroll_box(width = "1000px", height = "500px")
+
+kable(head(go_enrich15,10), caption =  "Top 10 GO Enriched Pathways for STR vs HPP", format = "html", align = "l", booktabs=TRUE) %>% kable_styling(html_font = "Arial", font_size = 10, bootstrap_options = c("striped", "hover", "condensed", "responsive")) %>% scroll_box(width = "1000px", height = "500px")
+
+kable(head(go_enrich16,10), caption =  "Top 10 GO Enriched Pathways for VTA vs HPP", format = "html", align = "l", booktabs=TRUE) %>% kable_styling(html_font = "Arial", font_size = 10, bootstrap_options = c("striped", "hover", "condensed", "responsive")) %>% scroll_box(width = "1000px", height = "500px")
+
+kable(head(go_enrich17,10), caption =  "Top 10 GO Enriched Pathways for VTA vs STR", format = "html", align = "l", booktabs=TRUE) %>% kable_styling(html_font = "Arial", font_size = 10, bootstrap_options = c("striped", "hover", "condensed", "responsive")) %>% scroll_box(width = "1000px", height = "500px")
+
+kable(head(go_enrich18,10), caption =  "Top 10 GO Enriched Pathways for VTA vs PFC", format = "html", align = "l", booktabs=TRUE) %>% kable_styling(html_font = "Arial", font_size = 10, bootstrap_options = c("striped", "hover", "condensed", "responsive")) %>% scroll_box(width = "1000px", height = "500px")
+
+kable(head(go_enrich19,10), caption =  "Top 10 GO Enriched Pathways for VTA vs CTX", format = "html", align = "l", booktabs=TRUE) %>% kable_styling(html_font = "Arial", font_size = 10, bootstrap_options = c("striped", "hover", "condensed", "responsive")) %>% scroll_box(width = "1000px", height = "500px")
+
+kable(head(go_enrich20,10), caption =  "Top 10 GO Enriched Pathways for PFC vs HPP", format = "html", align = "l", booktabs=TRUE) %>% kable_styling(html_font = "Arial", font_size = 10, bootstrap_options = c("striped", "hover", "condensed", "responsive")) %>% scroll_box(width = "1000px", height = "500px")
+
+```
+
+Following enrichment we utilize the "rrvgo" package to reduce terms to their higherarchical term.
+
+```{r fig.height=6, fig.width=8}
+
+go_enrich_dataset1 <- as.data.frame(go_enrich1)
+go_enrich_dataset2 <- as.data.frame(go_enrich2)
+go_enrich_dataset3 <- as.data.frame(go_enrich3)
+go_enrich_dataset4 <- as.data.frame(go_enrich4)
+go_enrich_dataset5 <- as.data.frame(go_enrich5)
+go_enrich_dataset6 <- as.data.frame(go_enrich6)
+go_enrich_dataset7 <- as.data.frame(go_enrich7)
+go_enrich_dataset8 <- as.data.frame(go_enrich8)
+go_enrich_dataset9 <- as.data.frame(go_enrich9)
+go_enrich_dataset10 <- as.data.frame(go_enrich10)
+go_enrich_dataset11 <- as.data.frame(go_enrich11)
+go_enrich_dataset12 <- as.data.frame(go_enrich12)
+go_enrich_dataset13 <- as.data.frame(go_enrich13)
+go_enrich_dataset14 <- as.data.frame(go_enrich14)
+go_enrich_dataset15 <- as.data.frame(go_enrich15)
+go_enrich_dataset16 <- as.data.frame(go_enrich16)
+go_enrich_dataset17 <- as.data.frame(go_enrich17)
+go_enrich_dataset18 <- as.data.frame(go_enrich18)
+go_enrich_dataset19 <- as.data.frame(go_enrich19)
+go_enrich_dataset20 <- as.data.frame(go_enrich20)
+
+
+go_enrich_dataset1$Dataset <- "HPP vs CTX"
+go_enrich_dataset2$Dataset <- "PFC vs CTX"
+go_enrich_dataset3$Dataset <- "STR vs PFC"
+go_enrich_dataset4$Dataset <- "STR vs CTX"
+go_enrich_dataset5$Dataset <- "HPP vs STR"
+go_enrich_dataset6$Dataset <- "HPP vs VTA"
+go_enrich_dataset7$Dataset <- "STR vs VTA"
+go_enrich_dataset8$Dataset <- "PFC vs VTA"
+go_enrich_dataset9$Dataset <- "CTX vs VTA"
+go_enrich_dataset10$Dataset <- "HPP vs PFC"
+go_enrich_dataset11$Dataset <- "CTX vs HPP"
+#go_enrich_dataset12$Dataset <- "CTX vs PFC"
+go_enrich_dataset13$Dataset <- "PFC vs STR"
+go_enrich_dataset14$Dataset <- "CTX vs STR"
+#go_enrich_dataset15$Dataset <- "STR vs HPP"
+go_enrich_dataset16$Dataset <- "VTA vs HPP"
+go_enrich_dataset17$Dataset <- "VTA vs STR"
+go_enrich_dataset18$Dataset <- "VTA vs PFC"
+go_enrich_dataset19$Dataset <- "VTA vs CTX"
+go_enrich_dataset20$Dataset <- "PFC vs HPP"
+
+
+go_enrich_dataset1$Region <- "HPP"
+go_enrich_dataset2$Region <- "PFC"
+go_enrich_dataset3$Region <- "STR"
+go_enrich_dataset4$Region <- "STR"
+go_enrich_dataset5$Region <- "HPP"
+go_enrich_dataset6$Region <- "HPP"
+go_enrich_dataset7$Region <- "STR"
+go_enrich_dataset8$Region <- "PFC"
+go_enrich_dataset9$Region <- "CTX"
+go_enrich_dataset10$Region <- "HPP"
+go_enrich_dataset11$Region <- "CTX"
+#go_enrich_dataset12$Region <- "CTX"
+go_enrich_dataset13$Region <- "PFC"
+go_enrich_dataset14$Region <- "CTX"
+#go_enrich_dataset15$Region <- "STR"
+go_enrich_dataset16$Region <- "VTA"
+go_enrich_dataset17$Region <- "VTA"
+go_enrich_dataset18$Region <- "VTA"
+go_enrich_dataset19$Region <- "VTA"
+go_enrich_dataset20$Region <- "PFC"
+
+
+go_enrich_dataset1$Comparison <- "CTX"
+go_enrich_dataset2$Comparison <- "CTX"
+go_enrich_dataset3$Comparison <- "PFC"
+go_enrich_dataset4$Comparison <- "CTX"
+go_enrich_dataset5$Comparison <- "STR"
+go_enrich_dataset6$Comparison <- "VTA"
+go_enrich_dataset7$Comparison <- "VTA"
+go_enrich_dataset8$Comparison <- "VTA"
+go_enrich_dataset9$Comparison <- "VTA"
+go_enrich_dataset10$Comparison <- "PFC"
+go_enrich_dataset11$Comparison <- "HPP"
+#go_enrich_dataset12$Comparison <- "PFC"
+go_enrich_dataset13$Comparison <- "STR"
+go_enrich_dataset14$Comparison <- "STR"
+#go_enrich_dataset15$Comparison <- "HPP"
+go_enrich_dataset16$Comparison <- "HPP"
+go_enrich_dataset17$Comparison <- "STR"
+go_enrich_dataset18$Comparison <- "PFC"
+go_enrich_dataset19$Comparison <- "CTX"
+go_enrich_dataset20$Comparison <- "HPP"
+
+
+
+GODatamergedUnsimplified1 <- merge(go_enrich_dataset1, go_enrich_dataset2, all = TRUE)
+GODatamergedUnsimplified2 <- merge(GODatamergedUnsimplified1, go_enrich_dataset3, all = TRUE)
+GODatamergedUnsimplified3 <- merge(GODatamergedUnsimplified2, go_enrich_dataset4, all = TRUE)
+GODatamergedUnsimplified4 <- merge(GODatamergedUnsimplified3, go_enrich_dataset5, all = TRUE)
+GODatamergedUnsimplified5 <- merge(GODatamergedUnsimplified4, go_enrich_dataset6, all = TRUE)
+GODatamergedUnsimplified6 <- merge(GODatamergedUnsimplified5, go_enrich_dataset7, all = TRUE)
+GODatamergedUnsimplified7 <- merge(GODatamergedUnsimplified6, go_enrich_dataset8, all = TRUE)
+GODatamergedUnsimplified8 <- merge(GODatamergedUnsimplified7, go_enrich_dataset9, all = TRUE)
+GODatamergedUnsimplified9 <- merge(GODatamergedUnsimplified8, go_enrich_dataset10, all = TRUE)
+GODatamergedUnsimplified10 <- merge(GODatamergedUnsimplified9, go_enrich_dataset11, all = TRUE)
+GODatamergedUnsimplified11 <- merge(GODatamergedUnsimplified10, go_enrich_dataset12, all = TRUE)
+GODatamergedUnsimplified12 <- merge(GODatamergedUnsimplified11, go_enrich_dataset13, all = TRUE)
+GODatamergedUnsimplified13 <- merge(GODatamergedUnsimplified12, go_enrich_dataset14, all = TRUE)
+GODatamergedUnsimplified14 <- merge(GODatamergedUnsimplified13, go_enrich_dataset15, all = TRUE)
+GODatamergedUnsimplified15 <- merge(GODatamergedUnsimplified14, go_enrich_dataset16, all = TRUE)
+GODatamergedUnsimplified16 <- merge(GODatamergedUnsimplified15, go_enrich_dataset17, all = TRUE)
+GODatamergedUnsimplified17 <- merge(GODatamergedUnsimplified16, go_enrich_dataset18, all = TRUE)
+GODatamergedUnsimplified18 <- merge(GODatamergedUnsimplified17, go_enrich_dataset19, all = TRUE)
+GODatamergedUnsimplified19 <- merge(GODatamergedUnsimplified18, go_enrich_dataset20, all = TRUE)
+
+#write.csv(GODatamergedUnsimplified19, "output/RNASeq_DEGs/GO_Analysis/GOEnrich_NonMinimized_AllComps_BRMICRNASeqDEGS_L2FC1Input_qval05Output.csv")
+
+
+```
+
+
+## Simplify Go Terms using RRVGO (Similar to GoSemSim)
+
+```{r fig.height=10, fig.width=14}
+
+## Make Files Readable for RRVGO
+# Iterate over each data frame to make them accessible to RRVGO.
+for (i in 1:20) {
+    current_dataset <- get(paste0("go_enrich_dataset", i))
+
+    # Subset BY "ONTOLOGY"
+    BP_subset <- current_dataset[current_dataset$ONTOLOGY == "BP", ]
+    assign(paste0("go_enrich_dataset", i, "_BP", i), BP_subset)
+
+    CC_subset <- current_dataset[current_dataset$ONTOLOGY == "CC", ]
+    assign(paste0("go_enrich_dataset", i, "_CC", i), CC_subset)
+
+    MF_subset <- current_dataset[current_dataset$ONTOLOGY == "MF", ]
+    assign(paste0("go_enrich_dataset", i, "_MF", i), MF_subset)
+}
+
+process_enrichment_data_BP <- function(dataset_num) {
+    dataset_name <- paste0("go_enrich_dataset", dataset_num, "_BP", dataset_num)
+    
+
+    if (exists(dataset_name) && nrow(get(dataset_name)) > 1) {
+
+        simMatrix_BP <- calculateSimMatrix(get(dataset_name)$ID,
+                                           orgdb = "org.Mm.eg.db",
+                                           ont = "BP",
+                                           method = "Rel")
+        
+        scores_BP <- setNames(-log10(get(dataset_name)$p.adjust),
+                               get(dataset_name)$ID)
+        
+        reducedTerms_BP <- reduceSimMatrix(simMatrix_BP,
+                                           scores_BP,
+                                           threshold = 0.5,
+                                           orgdb = "org.Mm.eg.db")
+        
+
+        assign(paste0("reducedTerms_go_enrich_dataset", dataset_num, "_BP", dataset_num), reducedTerms_BP, envir = .GlobalEnv)
+        
+    } else {
+      
+        cat("Skipping dataset", dataset_num, "as it doesn't exist or has no data.\n")
+    }
+}
+
+process_enrichment_data_CC <- function(dataset_num) {
+    dataset_name <- paste0("go_enrich_dataset", dataset_num, "_CC", dataset_num)
+    
+    
+    if (exists(dataset_name) && nrow(get(dataset_name)) > 1) {
+        
+        simMatrix_CC <- calculateSimMatrix(get(dataset_name)$ID,
+                                           orgdb = "org.Mm.eg.db",
+                                           ont = "CC",
+                                           method = "Rel")
+        
+       
+        scores_CC <- setNames(-log10(get(dataset_name)$p.adjust),
+                               get(dataset_name)$ID)
+        
+     
+        reducedTerms_CC <- reduceSimMatrix(simMatrix_CC,
+                                           scores_CC,
+                                           threshold = 0.5,
+                                           orgdb = "org.Mm.eg.db")
+        
+        
+        assign(paste0("reducedTerms_go_enrich_dataset", dataset_num, "_CC", dataset_num), reducedTerms_CC, envir = .GlobalEnv)
+        
+    } else {
+      
+        cat("Skipping dataset", dataset_num, "as it doesn't exist or has no data.\n")
+    }
+}
+
+process_enrichment_data_MF <- function(dataset_num) {
+    dataset_name <- paste0("go_enrich_dataset", dataset_num, "_MF", dataset_num)
+    
+    
+    if (exists(dataset_name) && nrow(get(dataset_name)) > 1) {
+        
+        simMatrix_MF <- calculateSimMatrix(get(dataset_name)$ID,
+                                           orgdb = "org.Mm.eg.db",
+                                           ont = "MF",
+                                           method = "Rel")
+        
+        
+        scores_MF <- setNames(-log10(get(dataset_name)$p.adjust),
+                               get(dataset_name)$ID)
+        
+       
+        reducedTerms_MF <- reduceSimMatrix(simMatrix_MF,
+                                           scores_MF,
+                                           threshold = 0.5,
+                                           orgdb = "org.Mm.eg.db")
+        
+        
+        assign(paste0("reducedTerms_go_enrich_dataset", dataset_num, "_MF", dataset_num), reducedTerms_MF, envir = .GlobalEnv)
+        
+    } else {
+        
+        cat("Skipping dataset", dataset_num, "as it doesn't exist or has no data.\n")
+    }
+}
+
+# Loop through all "BP" Datasets
+for (i in 1:20) {
+    process_enrichment_data_BP(i)
+}
+
+# Loop through all "CC" Datasets
+for (i in 1:20) {
+    process_enrichment_data_CC(i)
+}
+
+# Loop through all "MF" Datasets
+for (i in 1:20) {
+    process_enrichment_data_MF(i)
+}
+
+process_final_terms <- function(dataset_num) {
+    ontologies <- c("BP", "CC", "MF")
+    
+    final_terms_list <- list()
+    
+    for (ont in ontologies) {
+        df_name <- paste0("reducedTerms_go_enrich_dataset", dataset_num, "_", ont, dataset_num)
+        
+        if (!exists(df_name)) {
+            cat("Skipping", df_name, "as it doesn't exist.\n")
+            next 
+        }
+
+        df <- get(df_name)
+        
+        tryCatch({
+            # Group by 'parent' and select the row with the maximum 'score'
+            final_terms <- df %>%
+                group_by(parent) %>%
+                summarise(score = max(score), parentTerm = dplyr::first(parentTerm)) %>%
+                ungroup()
+            
+            # Append the final terms dataframe to the list
+            final_terms_list[[ont]] <- final_terms
+            
+            cat("Final terms for", df_name, "have been processed.\n")
+        }, error = function(e) {
+            cat("Error processing", df_name, ": ", conditionMessage(e), "\n")
+        })
+    }
+    
+    # Merge final terms dataframes for all ontologies
+    final_terms_merged <- bind_rows(final_terms_list, .id = "ontology")
+    
+    assign(paste0("FinalTerms_go_enrich_dataset", dataset_num), final_terms_merged, envir = .GlobalEnv)
+}
+
+for (i in 1:20) {
+    process_final_terms(i)
+}
+
+
+FinalTerms_go_enrich_dataset1$Dataset <- "HPP vs CTX"
+FinalTerms_go_enrich_dataset2$Dataset <- "PFC vs CTX"
+FinalTerms_go_enrich_dataset3$Dataset <- "STR vs PFC"
+FinalTerms_go_enrich_dataset4$Dataset <- "STR vs CTX"
+FinalTerms_go_enrich_dataset5$Dataset <- "HPP vs STR"
+FinalTerms_go_enrich_dataset6$Dataset <- "HPP vs VTA"
+FinalTerms_go_enrich_dataset7$Dataset <- "STR vs VTA"
+FinalTerms_go_enrich_dataset8$Dataset <- "PFC vs VTA"
+FinalTerms_go_enrich_dataset9$Dataset <- "CTX vs VTA"
+FinalTerms_go_enrich_dataset10$Dataset <- "HPP vs PFC"
+FinalTerms_go_enrich_dataset11$Dataset <- "CTX vs HPP"
+FinalTerms_go_enrich_dataset12$Dataset <- "CTX vs PFC"
+FinalTerms_go_enrich_dataset13$Dataset <- "PFC vs STR"
+FinalTerms_go_enrich_dataset14$Dataset <- "CTX vs STR"
+FinalTerms_go_enrich_dataset15$Dataset <- "STR vs HPP"
+FinalTerms_go_enrich_dataset16$Dataset <- "VTA vs HPP"
+FinalTerms_go_enrich_dataset17$Dataset <- "VTA vs STR"
+FinalTerms_go_enrich_dataset18$Dataset <- "VTA vs PFC"
+FinalTerms_go_enrich_dataset19$Dataset <- "VTA vs CTX"
+FinalTerms_go_enrich_dataset20$Dataset <- "PFC vs HPP"
+
+
+FinalTerms_go_enrich_dataset1$Region <- "HPP"
+FinalTerms_go_enrich_dataset2$Region <- "PFC"
+FinalTerms_go_enrich_dataset3$Region <- "STR"
+FinalTerms_go_enrich_dataset4$Region <- "STR"
+FinalTerms_go_enrich_dataset5$Region <- "HPP"
+FinalTerms_go_enrich_dataset6$Region <- "HPP"
+FinalTerms_go_enrich_dataset7$Region <- "STR"
+FinalTerms_go_enrich_dataset8$Region <- "PFC"
+FinalTerms_go_enrich_dataset9$Region <- "CTX"
+FinalTerms_go_enrich_dataset10$Region <- "HPP"
+FinalTerms_go_enrich_dataset11$Region <- "CTX"
+FinalTerms_go_enrich_dataset12$Region <- "CTX"
+FinalTerms_go_enrich_dataset13$Region <- "PFC"
+FinalTerms_go_enrich_dataset14$Region <- "CTX"
+FinalTerms_go_enrich_dataset15$Region <- "STR"
+FinalTerms_go_enrich_dataset16$Region <- "VTA"
+FinalTerms_go_enrich_dataset17$Region <- "VTA"
+FinalTerms_go_enrich_dataset18$Region <- "VTA"
+FinalTerms_go_enrich_dataset19$Region <- "VTA"
+FinalTerms_go_enrich_dataset20$Region <- "PFC"
+
+
+FinalTerms_go_enrich_dataset1$Comparison <- "CTX"
+FinalTerms_go_enrich_dataset2$Comparison <- "CTX"
+FinalTerms_go_enrich_dataset3$Comparison <- "PFC"
+FinalTerms_go_enrich_dataset4$Comparison <- "CTX"
+FinalTerms_go_enrich_dataset5$Comparison <- "STR"
+FinalTerms_go_enrich_dataset6$Comparison <- "VTA"
+FinalTerms_go_enrich_dataset7$Comparison <- "VTA"
+FinalTerms_go_enrich_dataset8$Comparison <- "VTA"
+FinalTerms_go_enrich_dataset9$Comparison <- "VTA"
+FinalTerms_go_enrich_dataset10$Comparison <- "PFC"
+FinalTerms_go_enrich_dataset11$Comparison <- "HPP"
+FinalTerms_go_enrich_dataset12$Comparison <- "PFC"
+FinalTerms_go_enrich_dataset13$Comparison <- "STR"
+FinalTerms_go_enrich_dataset14$Comparison <- "STR"
+FinalTerms_go_enrich_dataset15$Comparison <- "HPP"
+FinalTerms_go_enrich_dataset16$Comparison <- "HPP"
+FinalTerms_go_enrich_dataset17$Comparison <- "STR"
+FinalTerms_go_enrich_dataset18$Comparison <- "PFC"
+FinalTerms_go_enrich_dataset19$Comparison <- "CTX"
+FinalTerms_go_enrich_dataset20$Comparison <- "HPP"
+
+
+CTX1 <- merge(FinalTerms_go_enrich_dataset9, FinalTerms_go_enrich_dataset11, all=TRUE)
+CTX2 <- merge(CTX1, FinalTerms_go_enrich_dataset12, all=TRUE)
+CTX3 <- merge(CTX2, FinalTerms_go_enrich_dataset14, all=TRUE)
+
+HPP1 <- merge(FinalTerms_go_enrich_dataset1, FinalTerms_go_enrich_dataset5, all=TRUE)
+HPP2 <- merge(HPP1, FinalTerms_go_enrich_dataset6, all=TRUE)
+HPP3 <- merge(HPP2, FinalTerms_go_enrich_dataset10, all=TRUE)
+
+STR1 <- merge(FinalTerms_go_enrich_dataset3, FinalTerms_go_enrich_dataset4, all=TRUE)
+STR2 <- merge(STR1, FinalTerms_go_enrich_dataset7, all=TRUE)
+STR3 <- merge(STR2, FinalTerms_go_enrich_dataset15, all=TRUE)
+
+PFC1 <- merge(FinalTerms_go_enrich_dataset2, FinalTerms_go_enrich_dataset8, all=TRUE)
+PFC2 <- merge(PFC1, FinalTerms_go_enrich_dataset13, all=TRUE)
+PFC3 <- merge(PFC2, FinalTerms_go_enrich_dataset20, all=TRUE)
+
+VTA1 <- merge(FinalTerms_go_enrich_dataset16, FinalTerms_go_enrich_dataset17, all=TRUE)
+VTA2 <- merge(VTA1, FinalTerms_go_enrich_dataset18, all=TRUE)
+VTA3 <- merge(VTA2, FinalTerms_go_enrich_dataset19, all=TRUE)
+
+
+AllGoMerged1 <- merge(CTX3, HPP3, all = TRUE)
+AllGoMerged2 <- merge(AllGoMerged1, STR3, all = TRUE)
+AllGoMerged3 <- merge(AllGoMerged2, PFC3, all = TRUE)
+AllGoMerged4 <- merge(AllGoMerged3, VTA3, all = TRUE)
+
+#write.csv(AllGoMerged4, "output/RNASeq_DEGs/GO_Analysis/GOEnrich_Minimized_AllComps_BRMICRNASeq.csv")
+
+# Rename Score column to "log_adjpvalue"
+CTX3$log_adjpvalue <- CTX3$score
+HPP3$log_adjpvalue <- HPP3$score
+STR3$log_adjpvalue <- STR3$score
+PFC3$log_adjpvalue <- PFC3$score
+VTA3$log_adjpvalue <- VTA3$score
+
+# Adjust Text Wrapping for the GO Description and Take the top 10
+top_10_CTX <- head(CTX3[order(CTX3$log_adjpvalue, decreasing = TRUE), ], 10)
+top_10_CTX$parentTerm <- str_wrap(top_10_CTX$parentTerm, width = 25)
+top_10_HPP <- head(HPP3[order(HPP3$log_adjpvalue, decreasing = TRUE), ], 10)
+top_10_HPP$parentTerm <- str_wrap(top_10_HPP$parentTerm, width = 25)
+top_10_STR <- head(STR3[order(STR3$log_adjpvalue, decreasing = TRUE), ], 10)
+top_10_STR$parentTerm <- str_wrap(top_10_STR$parentTerm, width = 25)
+top_10_PFC <- head(PFC3[order(PFC3$log_adjpvalue, decreasing = TRUE), ], 10)
+top_10_PFC$parentTerm <- str_wrap(top_10_PFC$parentTerm, width = 25)
+top_10_VTA <- head(VTA3[order(VTA3$log_adjpvalue, decreasing = TRUE), ], 10)
+top_10_VTA$parentTerm <- str_wrap(top_10_VTA$parentTerm, width = 25)
+
+
+### Creat the Plots
+dodge_width <- 1
+
+CTX <- ggplot(top_10_CTX, aes(x = parentTerm, y = log_adjpvalue, fill = Comparison)) +
+  theme_classic()+
+  geom_bar(stat = "identity", position = position_dodge(width = dodge_width)) +  
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 10, family = "Arial", color = "black"),  
+        plot.margin = unit(c(1, 1, 2, 1), "cm"),  
+        axis.text = element_text(margin = margin(1, unit("cm", "cm"), 1, 1), family = "Arial"),  
+        axis.title = element_text(family = "Arial"),  
+        legend.text = element_text(family = "Arial"),  
+        legend.title = element_text(family = "Arial")) + 
+  labs(x = "Description", y = "-log(adj.pvalue)", fill = "Dataset") +
+  ggtitle("CTX :Top 10 Description vs -log(adj.pvalue) colored by Dataset") +
+  scale_x_discrete(expand = expansion(add = c(1, 1)))  +
+  scale_fill_manual(values = custom_colors)
+
+HPP <- ggplot(top_10_HPP, aes(x = parentTerm, y = log_adjpvalue, fill = Comparison)) +
+  theme_classic()+
+  geom_bar(stat = "identity", position = position_dodge(width = dodge_width)) +  
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 10, family = "Arial", color = "black"), 
+        plot.margin = unit(c(1, 1, 2, 1), "cm"),  
+        axis.text = element_text(margin = margin(1, unit("cm", "cm"), 1, 1), family = "Arial"),  
+        axis.title = element_text(family = "Arial"),  
+        legend.text = element_text(family = "Arial"),  
+        legend.title = element_text(family = "Arial")) +  
+  labs(x = "Description", y = "-log(adj.pvalue)", fill = "Dataset") +
+  ggtitle("HPP:Top 10 Description vs -log(adj.pvalue) colored by Dataset") +
+  scale_x_discrete(expand = expansion(add = c(1, 1)))  +
+  scale_fill_manual(values = custom_colors)
+
+STR <- ggplot(top_10_STR, aes(x = parentTerm, y = log_adjpvalue, fill = Comparison)) +
+  theme_classic()+
+  geom_bar(stat = "identity", position = position_dodge(width = dodge_width)) +  
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 10, family = "Arial", color = "black"),  
+        plot.margin = unit(c(1, 1, 2, 1), "cm"),  
+        axis.text = element_text(margin = margin(1, unit("cm", "cm"), 1, 1), family = "Arial"), 
+        axis.title = element_text(family = "Arial"),  
+        legend.text = element_text(family = "Arial"), 
+        legend.title = element_text(family = "Arial")) +  
+  labs(x = "Description", y = "-log(adj.pvalue)", fill = "Dataset") +
+  ggtitle("PFC:Top 10 Description vs -log(adj.pvalue) colored by Dataset") +
+  scale_x_discrete(expand = expansion(add = c(1, 1)))  +
+  scale_fill_manual(values = custom_colors)
+
+PFC <- ggplot(top_10_PFC, aes(x = parentTerm, y = log_adjpvalue, fill = Comparison)) +
+  theme_classic()+
+  geom_bar(stat = "identity", position = position_dodge(width = dodge_width)) + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 10, family = "Arial", color = "black"), 
+        plot.margin = unit(c(1, 1, 2, 1), "cm"), 
+        axis.text = element_text(margin = margin(1, unit("cm", "cm"), 1, 1), family = "Arial"),  
+        axis.title = element_text(family = "Arial"),  
+        legend.text = element_text(family = "Arial"), 
+        legend.title = element_text(family = "Arial")) +  
+  labs(x = "Description", y = "-log(adj.pvalue)", fill = "Dataset") +
+  ggtitle("PFC:Top 10 Description vs -log(adj.pvalue) colored by Dataset") +
+  scale_x_discrete(expand = expansion(add = c(1, 1)))  +
+  scale_fill_manual(values = custom_colors)
+
+VTA <- ggplot(top_10_VTA, aes(x = parentTerm, y = log_adjpvalue, fill = Comparison)) +
+  theme_classic()+
+  geom_bar(stat = "identity", position = position_dodge(width = dodge_width)) +  
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 10, family = "Arial", color = "black"),  
+        plot.margin = unit(c(1, 1, 2, 1), "cm"), 
+        axis.text = element_text(margin = margin(1, unit("cm", "cm"), 1, 1), family = "Arial"),  
+        axis.title = element_text(family = "Arial"), 
+        legend.text = element_text(family = "Arial"),  
+        legend.title = element_text(family = "Arial")) + 
+  labs(x = "Description", y = "-log(adj.pvalue)", fill = "Dataset") +
+  ggtitle("VTA:Top 10 Description vs -log(adj.pvalue) colored by Dataset") +
+  scale_x_discrete(expand = expansion(add = c(1, 1)))  +
+  scale_fill_manual(values = custom_colors)+
+  facet_wrap(~ontology)
+
+
+print(top_10_HPP)
+print(top_10_CTX)
+print(top_10_VTA)
+print(top_10_STR)
+print(top_10_PFC)
+
+Merge1 <- merge(top_10_HPP, top_10_CTX, all=TRUE)
+Merge2 <- merge(Merge1, top_10_VTA, all=TRUE)
+Merge3 <- merge(Merge2, top_10_STR, all=TRUE)
+Merge4 <- merge(Merge3, top_10_PFC, all=TRUE)
+
+#write.csv(Merge4, "output/RNASeq_DEGs/GO_Analysis/GO_Minimized_Top10EachRegion_AllComps_BRMICRNASeq.csv")
+
+Merge4$parentTerm <- str_wrap(Merge4$parentTerm, width = 30)
+Merge4$parentTerm <- str_to_sentence(Merge4$parentTerm)
+
+Merged_GOPlots <- ggplot(Merge4, aes(x = parentTerm, y = log_pvalue, fill = Comparison)) +
+  theme_classic()+
+  geom_bar(stat = "identity", position = position_dodge2(width = 1, preserve = "single"), width = 2) +  
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 8, color = "black"),
+        plot.margin = unit(c(2, 2, 2, 2), "cm"),
+        axis.text = element_text(margin = margin(1, unit("cm", "cm"), 1, 1))) + 
+  labs(x = "Gene Ontology Pathways", y = "-log(adj.pvalue)", fill = "Dataset") +
+  ggtitle("Top 10 GeneOntology Pathways By Comparison") +
+  scale_fill_manual(values = custom_colors)+
+  facet_grid(. ~ Region, scales = "free")
+
+#pdf("output/RNASeq_DEGs/GO_Analysis/GO_Minimized_Top10Paths_AllComps_BARPLOT_BRMICRNASeq-Final.pdf", width = 14, height = 8)
+Merged_GOPlots
+#dev.off()
+
+```
+
+## Dotplots using Selected Simplified GO TERMS
+
+```{r}
+
+AllMerged4_Ordered <- if (exists("AllMerged4_Ordered")) {
+  AllMerged4_Ordered
+} else if (exists("AllMarged4_ordered")) {
+  AllMarged4_ordered
+} else {
+  if (!exists("AllGoMerged4")) stop("AllGoMerged4 not found.")
+  AllGoMerged4[order(AllGoMerged4$score, decreasing = TRUE), ]
+}
+
+## Ensure we have a -log10(p.adjust) column named log_pvalue
+if (!("log_adjpvalue" %in% names(AllMerged4_Ordered))) {
+  if ("score" %in% names(AllMerged4_Ordered)) {
+    AllMerged4_Ordered$log_adjpvalue <- AllMerged4_Ordered$score
+  } else {
+    stop("Neither 'log_adjpvalue' nor 'score' found to write log_adjpvalue.")
+  }
+}
+
+top_n <- 10
+plot_df <- AllMerged4_Ordered |>
+  dplyr::filter(!is.na(parentTerm), !is.na(Region), !is.na(ontology)) |>
+  dplyr::group_by(Region, ontology) |>
+  dplyr::slice_max(order_by = log_adjpvalue, n = top_n, with_ties = FALSE) |>
+  dplyr::ungroup()
+
+term_levels <- plot_df |>
+  dplyr::group_by(parentTerm) |>
+  dplyr::summarise(max_logp = max(log_adjpvalue, na.rm = TRUE), .groups = "drop") |>
+  dplyr::arrange(max_logp) |>
+  dplyr::pull(parentTerm)
+
+region_colors <- c(
+  "CTX" = "#FF9289", 
+  "HPP" = "#FF8AFF", 
+  "PFC" = "#00DB98", 
+  "STR" = "#00CBFF", 
+  "VTA" = "#BEC100"
+)
+
+
+plot_df$Region <- factor(plot_df$Region, levels = names(region_colors))
+
+
+p_ALL <- ggplot2::ggplot(
+  plot_df,
+  ggplot2::aes(x = Region, y = parentTerm, size = log_adjpvalue, color = Region)
+) +
+  ggplot2::geom_point(alpha = 0.9) +
+  ggplot2::scale_size_continuous(name = expression(-log[10]("adj. p")), range = c(1.5, 8)) +
+  ggplot2::scale_color_manual(
+    name = "Region",
+    values = region_colors,
+    limits = names(region_colors),  
+    drop = FALSE
+  ) +
+  ggplot2::labs(
+    x = NULL, y = "Representative GO term",
+    title = "GO term summary across brain regions (ALL Ontologies; RRVGO-reduced)",
+    subtitle = paste0("Top ", top_n, " terms per Region × Ontology")
+  ) +
+  ggplot2::theme_bw(base_size = 10) +
+  ggplot2::theme(
+    axis.text.y = ggplot2::element_text(size = 8),
+    legend.position = "right"
+  )+ 
+  ggplot2::facet_grid(ontology ~ Region, scales = "free", space = "free_y")
+
+print(p_ALL)
+
+
+#pdf("output/RNASeq_DEGs/GO_Analysis/GO_Minimized_Top10AllComps_DotPlot_AllOnt_BRMICRNASeq_Final.pdf", width = 12, height = 12)
+#print(p_ALL)
+#dev.off()
+
+
+## Remove MF and CC Ontologies
+plot_df$Region <- factor(plot_df$Region, levels = names(region_colors))
+
+plot_df2 <- plot_df |> 
+  dplyr::filter(!(ontology == "MF"))
+
+plot_df3 <- plot_df2 |> 
+  dplyr::filter(!(ontology == "CC"))
+
+p_BP <- ggplot2::ggplot(
+  plot_df3,
+  ggplot2::aes(x = Region, y = parentTerm, size = log_adjpvalue, color = Region)
+) +
+  ggplot2::geom_point(alpha = 0.9) +
+  ggplot2::scale_size_continuous(name = expression(-log[10]("adj. p")), range = c(1.5, 8)) +
+  ggplot2::scale_color_manual(
+    name = "Region",
+    values = region_colors,
+    limits = names(region_colors), 
+    drop = FALSE
+  ) +
+  ggplot2::labs(
+    x = NULL, y = "Representative GO term",
+    title = "GO term summary across brain regions (BP Only; RRVGO-reduced)",
+    subtitle = paste0("Top ", top_n, " terms per Region × Ontology")
+  ) +
+  ggplot2::theme_bw(base_size = 10) +
+  ggplot2::theme(
+    axis.text.y = ggplot2::element_text(size = 8),
+    legend.position = "right"
+  ) 
+
+print(p_BP)
+
+
+#pdf("output/RNASeq_DEGs/GO_Analysis/GO_Minimized_Top10AllComps_DotPlot_BPOnly_BRMICRNASeq_Final.pdf", width = 12, height = 12)
+#print(p_BP)
+#dev.off()
+
+
+## Only Remove CC
+plot_df$Region <- factor(plot_df$Region, levels = names(region_colors))
+
+plot_df4 <- plot_df |> 
+  dplyr::filter(!(ontology == "CC"))
+
+
+p_BPMF <- ggplot2::ggplot(
+  plot_df4,
+  ggplot2::aes(x = Region, y = parentTerm, size = log_adjpvalue, color = Region)
+) +
+  ggplot2::geom_point(alpha = 0.9) +
+  ggplot2::scale_size_continuous(name = expression(-log[10]("adj. p")), range = c(1.5, 8)) +
+  ggplot2::scale_color_manual(
+    name = "Region",
+    values = region_colors,
+    limits = names(region_colors),  
+    drop = FALSE
+  ) +
+  ggplot2::labs(
+    x = NULL, y = "Representative GO term",
+    title = "GO term summary across brain regions (BP&MF; RRVGO-reduced)",
+    subtitle = paste0("Top ", top_n, " terms per Region × Ontology")
+  ) +
+  ggplot2::theme_bw(base_size = 10) +
+  ggplot2::theme(
+    axis.text.y = ggplot2::element_text(size = 8),
+    legend.position = "right"
+  ) 
+
+
+print(p_BPMF)
+
+
+#pdf("output/RNASeq_DEGs/GO_Analysis/GO_Minimized_Top10AllComps_DotPlot_BPMFOntOnly_BRMICRNASeq_Final.pdf", width = 12, height = 12)
+#print(p_BPMF)
+#dev.off()
+
+
+```
+
+# Session Info
+
+```{r Print Session Info, echo=TRUE, message=TRUE, warning=FALSE}
+sessionInfo()
+```
