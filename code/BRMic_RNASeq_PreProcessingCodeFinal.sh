@@ -156,8 +156,12 @@ wait
 
 echo "Generating sample info list for StringTie"
 
-echo "MVTA6 /home/avm27/Documents/Raw_Sequencing_Data/BR_MIC_RNASeq/StringTie/MVTA6.gtf" > $stringtiedir/sample_lst_$experimentname.txt
-echo "MCTX4 /home/avm27/Documents/Raw_Sequencing_Data/BR_MIC_RNASeq/StringTie/MCTX4.gtf" >> $stringtiedir/sample_lst_$experimentname.txt
+
+for d in $(find $fastqPath -type f -name "**.fastq.gz" | while read F; do basename $F | rev | cut -c 13- | rev; done | sort | uniq); do
+  echo "${d}	$stringtiedir/${d}.gtf" >> $projPath/sample_lst_${experimentname}.txt
+done
+
+cat $projPath/sample_lst_${experimentname}.txt
 
 
 echo "Completed Same Info File"
