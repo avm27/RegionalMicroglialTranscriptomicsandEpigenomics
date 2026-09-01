@@ -1,45 +1,22 @@
 ---
+title: "Correlating Regional Gene Expression with Epigenetic Features"
+site: workflowr::wflow_site
 output:
-  reprex::reprex_document:
-    venue: "gh"
-    advertise: FALSE
-    session_info: TRUE
-    style: TRUE
-    comment: "#;-)"
-    tidyverse_quiet: FALSE
-    std_out_err: TRUE
-knit: reprex::reprex_render
+  workflowr::wflow_html:
+    toc: false
+editor_options:
+  chunk_output_type: console
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 
-library(EnsDb.Mmusculus.v75)
-library(ChIPseeker)
-library(ChIPpeakAnno)
-library(ggplot2)
-library(clusterProfiler)
 library(AnnotationDbi)
 library(org.Mm.eg.db)
-library(TxDb.Mmusculus.UCSC.mm10.knownGene)
-library(rtracklayer)
-library(reactome.db)
-library(BSgenome.Mmusculus.UCSC.mm10)
-library(seqinr)
-library(UpSetR)
-library(trackViewer)
-library(ggpubr)
+library(GeneOverlap)
 library(dplyr)
 library(stringr)
-library(viridis)
-library(GenomicRanges)
-library(chromVAR)
-library(DESeq2)
-library(corrplot)
-library(ggupset)
-library(knitr)
-library(kableExtra)
-library(GeneOverlap)
+library(ggplot2)
 ```
 
 # Data Loading
@@ -49,24 +26,58 @@ library(GeneOverlap)
 Here we will utilize FPKM values generated from StringTie during the RNA-Sequencing processing pipeline. We utilize these to separate genes based on expression levels. We then map the GeneIDs to ENSMBL Ids using biomart and select for protein-coding genes only.
 
 ```{r}
-setwd("~/Documents/Raw_Sequencing_Data/BrainRegionMicroglia/RegionalMicroglialTranscriptomicsandEpigenomics")
+# Identify the repository root from the opened RStudio project
+projdir <- normalizePath(".", winslash = "/", mustWork = TRUE)
 
-dataPath="/data/RNASeq_FPKMs/"
+project_file <- file.path(projdir, "RegionalMicroglialTranscriptomicsandEpigenomics.Rproj")
 
-VTA8_FPKM <- read.table(paste0(dataPath, "MVTA8_FPKM.txt"), sep= "\t", header = TRUE)
-data <- VTA8_FPKM[, c("Gene.ID")]
-merged_data <- data.frame(Gene.ID=data)
+if (!file.exists(project_file)) {
+  stop(
+    paste(
+      "The repository root could not be identified.",
+      "Open RegionalMicroglialTranscriptomicsandEpigenomics.Rproj",
+      "before running this analysis."
+    )
+  )
+}
 
-# Set the working directory to the location of the files
-# Create a list of the filenames to merge
-file_list <- list.files(dataPath ,pattern = "*.txt")
+# Define RNA-Sequencing Input Directory
+dataPath <- file.path(projdir, "data", "RNASeq_FPKMs")
 
-# Create an empty data frame to store the merged data
+# Define Expected FPKM Files
+file_list <- c(
+  "MCTX8_FPKM.txt",
+  "MCTX9_FPKM.txt",
+  "MHPP8_FPKM.txt",
+  "MHPP9_FPKM.txt",
+  "MPFC8_FPKM.txt",
+  "MPFC9_FPKM.txt",
+  "MSTR8_FPKM.txt",
+  "MSTR9_FPKM.txt",
+  "MVTA8_FPKM.txt",
+  "MVTA9_FPKM.txt"
+)
+
+# Confirm Required Input Files Exist
+missing_files <- file_list[!file.exists(file.path(dataPath, file_list))]
+
+if (length(missing_files) > 0L) {
+  stop(
+    paste(
+      "The following required FPKM files were not found:",
+      paste(missing_files, collapse = ", ")
+    )
+  )
+}
+
+VTA8_FPKM <- read.table(file.path(dataPath, "MVTA8_FPKM.txt"), sep = "\t", header = TRUE)
+data <- VTA8_FPKM[, "Gene.ID", drop = FALSE]
+merged_data <- data.frame(Gene.ID = data$Gene.ID)
 
 # Loop through each file in the list
 for (file in file_list) {
   # Read in the data from the file
-  data <- read.table(paste0(dataPath, file), header = TRUE, sep = "\t")
+  data <- read.table(file.path(dataPath, file), header = TRUE, sep = "\t")
   head(data)
   
   # Extract only the Gene.ID and FPKM columns
@@ -85,21 +96,9 @@ for (file in file_list) {
 
 ## Rename Columns
 colnames(merged_data) <- c("Gene.ID", "CTX8", "CTX9", "HPP8", "HPP9", "PFC8", "PFC9", "STR8", "STR9", "VTA8", "VTA9")
-
-### Tidy up the data frame removing duplicate gene names and mapping the GENEIDs to ENSMBLE IDs
-#sum(is.na(merged_data$Gene.ID))
-#sum(duplicated(merged_data$Gene.ID))
-#length(rownames(merged_data))
-
-#dups <- merged_data$Gene.ID[duplicated(merged_data$Gene.ID)]
-#table(merged_data$Gene.ID[merged_data$Gene.ID %in% dups])
-
 dup_rows <- duplicated(merged_data$Gene.ID)
 merged_data_nodup <- merged_data[!dup_rows, ]
 
-#sum(is.na(merged_data_nodup$Gene.ID))
-#sum(duplicated(merged_data_nodup$Gene.ID))
-#length(rownames(merged_data_nodup))
 
 ```
 
@@ -278,50 +277,124 @@ Here we utilized HOMER to annotate our significantly called peaks. That can be d
 
 #!/bin/bash
 
-projPath="/peakCalling/SEACR/normalized"
-outDir="/peakCalling/SEACR/HOMER"
+# This optional preprocessing workflow requires external FASTQ and peak files.
+# Set BRMIC_EXTERNAL_DATA before running it manually.
 
-mkdir /peakCalling_subsample/SEACR/HOMER
+: "${BRMIC_EXTERNAL_DATA:?Set BRMIC_EXTERNAL_DATA before running this optional preprocessing workflow}"
 
-export PATH="/home/avm27/HOMER/bin:$PATH"
+externalDataDir="${BRMIC_EXTERNAL_DATA}"
+fastqdir="${externalDataDir}/fastq"
+peakdir="${externalDataDir}/peakCalling/SEACR/normalized"
+outdir="${externalDataDir}/peakCalling/SEACR/HOMER"
+
+annotatePeaks="$(command -v annotatePeaks.pl)"
+
+if [ -z "${annotatePeaks}" ]; then
+  echo "Required program not found: annotatePeaks.pl"
+  exit 1
+fi
+
+if [ ! -d "${fastqdir}" ]; then
+  echo "FASTQ directory not found: ${fastqdir}"
+  exit 1
+fi
+
+if [ ! -d "${peakdir}" ]; then
+  echo "Normalized peak directory not found: ${peakdir}"
+  exit 1
+fi
+
+mkdir -p "${outdir}"
 
 echo "Annotating Peaks Using HOMER"
 
-for histName in $(find FASTQ -type f -name "*.fastq.gz" | while read F; do basename $F | rev | cut -c 28- | rev; done | sort | uniq)
+for histName in $(find "${fastqdir}" -type f -name "*.fastq.gz" | while read F; do basename "$F" | rev | cut -c 28- | rev; done | sort | uniq)
 do
-    echo "HOMER Annotation for ${histName}"
-    
-    annotatePeaks.pl $projPath/${histName}_dupMarked_merge_normalized_spikein_seacr_control.peaks.stringent.bed mm10 > $outDir/${histName}_annot.txt
-   
+  peakfile="${peakdir}/${histName}_dupMarked_merge_normalized_spikein_seacr_control.peaks.stringent.bed"
+  outfile="${outdir}/${histName}_annot.txt"
+
+  if [ ! -f "${peakfile}" ]; then
+    echo "Peak file not found: ${peakfile}"
+    exit 1
+  fi
+
+  echo "HOMER annotation for ${histName}"
+
+  "${annotatePeaks}" "${peakfile}" mm10 > "${outfile}"
 done
 
 ```
 
 Following Annotation, we read our files in.
 
-```{r fig.height=24, fig.width=24}
-CTX8_Anno <- read.delim("/peakCalling/SEACR/HOMER/CTX8_H3K27ac_annot.txt", sep= "\t", header = TRUE)
-CTX9_Anno <- read.delim("/peakCalling/SEACR/HOMER/CTX9_H3K27ac_annot.txt", sep= "\t", header = TRUE)
-PFC8_Anno <- read.delim("/peakCalling/SEACR/HOMER/PFC8_H3K27ac_annot.txt", sep= "\t", header = TRUE)
-PFC9_Anno <- read.delim("/peakCalling/SEACR/HOMER/PFC9_H3K27ac_annot.txt", sep= "\t", header = TRUE)
-HPP8_Anno <- read.delim("/peakCalling/SEACR/HOMER/HPP8_H3K27ac_annot.txt", sep= "\t", header = TRUE)
-HPP9_Anno <- read.delim("/peakCalling/SEACR/HOMER/HPP9_H3K27ac_annot.txt", sep= "\t", header = TRUE)
-VTA8_Anno <- read.delim("/peakCalling/SEACR/HOMER/VTA8_H3K27ac_annot.txt", sep= "\t", header = TRUE)
-VTA9_Anno <- read.delim("/peakCalling/SEACR/HOMER/VTA9_H3K27ac_annot.txt", sep= "\t", header = TRUE)
-STR8_Anno <- read.delim("/peakCalling/SEACR/HOMER/STR8_H3K27ac_annot.txt", sep= "\t", header = TRUE)
-STR9_Anno <- read.delim("/peakCalling/SEACR/HOMER/STR9_H3K27ac_annot.txt", sep= "\t", header = TRUE)
+```{r}
+# Locate External HOMER Annotation Files
+externalDataDir <- Sys.getenv("BRMIC_EXTERNAL_DATA")
+homer_dir <- file.path(externalDataDir, "peakCalling", "SEACR", "HOMER")
 
+if (!nzchar(externalDataDir)) {
+  stop("BRMIC_EXTERNAL_DATA is not set. Set it to the external-data directory before running this analysis.")
+}
 
-CTX8_Anno_me3 <- read.delim("/peakCalling/SEACR/HOMER/CTX8_H3K27me3_annot.txt", sep= "\t", header = TRUE)
-CTX9_Anno_me3 <- read.delim("/peakCalling/SEACR/HOMER/CTX9_H3K27me3_annot.txt", sep= "\t", header = TRUE)
-PFC8_Anno_me3 <- read.delim("/peakCalling/SEACR/HOMER/PFC8_H3K27me3_annot.txt", sep= "\t", header = TRUE)
-PFC9_Anno_me3 <- read.delim("/peakCalling/SEACR/HOMER/PFC9_H3K27me3_annot.txt", sep= "\t", header = TRUE)
-HPP8_Anno_me3 <- read.delim("/peakCalling/SEACR/HOMER/HPP8_H3K27me3_annot.txt", sep= "\t", header = TRUE)
-HPP9_Anno_me3 <- read.delim("/peakCalling/SEACR/HOMER/HPP9_H3K27me3_annot.txt", sep= "\t", header = TRUE)
-VTA8_Anno_me3 <- read.delim("/peakCalling/SEACR/HOMER/VTA8_H3K27me3_annot.txt", sep= "\t", header = TRUE)
-VTA9_Anno_me3 <- read.delim("/peakCalling/SEACR/HOMER/VTA9_H3K27me3_annot.txt", sep= "\t", header = TRUE)
-STR8_Anno_me3 <- read.delim("/peakCalling/SEACR/HOMER/STR8_H3K27me3_annot.txt", sep= "\t", header = TRUE)
-STR9_Anno_me3 <- read.delim("/peakCalling/SEACR/HOMER/STR9_H3K27me3_annot.txt", sep= "\t", header = TRUE)
+# Define Required HOMER Annotation Files
+homer_files <- c(
+  "CTX8_H3K27ac_annot.txt",
+  "CTX9_H3K27ac_annot.txt",
+  "PFC8_H3K27ac_annot.txt",
+  "PFC9_H3K27ac_annot.txt",
+  "HPP8_H3K27ac_annot.txt",
+  "HPP9_H3K27ac_annot.txt",
+  "VTA8_H3K27ac_annot.txt",
+  "VTA9_H3K27ac_annot.txt",
+  "STR8_H3K27ac_annot.txt",
+  "STR9_H3K27ac_annot.txt",
+  "CTX8_H3K27me3_annot.txt",
+  "CTX9_H3K27me3_annot.txt",
+  "PFC8_H3K27me3_annot.txt",
+  "PFC9_H3K27me3_annot.txt",
+  "HPP8_H3K27me3_annot.txt",
+  "HPP9_H3K27me3_annot.txt",
+  "VTA8_H3K27me3_annot.txt",
+  "VTA9_H3K27me3_annot.txt",
+  "STR8_H3K27me3_annot.txt",
+  "STR9_H3K27me3_annot.txt"
+)
+
+# Confirm Required Annotation Files Exist
+missing_homer_files <- homer_files[!file.exists(file.path(homer_dir, homer_files))]
+
+if (length(missing_homer_files) > 0L) {
+  stop(
+    paste(
+      "The following required HOMER annotation files were not found:",
+      paste(missing_homer_files, collapse = ", ")
+    )
+  )
+}
+
+# Load H3K27ac Annotations
+CTX8_Anno <- read.delim(file.path(homer_dir, "CTX8_H3K27ac_annot.txt"), sep = "\t", header = TRUE)
+CTX9_Anno <- read.delim(file.path(homer_dir, "CTX9_H3K27ac_annot.txt"), sep = "\t", header = TRUE)
+PFC8_Anno <- read.delim(file.path(homer_dir, "PFC8_H3K27ac_annot.txt"), sep = "\t", header = TRUE)
+PFC9_Anno <- read.delim(file.path(homer_dir, "PFC9_H3K27ac_annot.txt"), sep = "\t", header = TRUE)
+HPP8_Anno <- read.delim(file.path(homer_dir, "HPP8_H3K27ac_annot.txt"), sep = "\t", header = TRUE)
+HPP9_Anno <- read.delim(file.path(homer_dir, "HPP9_H3K27ac_annot.txt"), sep = "\t", header = TRUE)
+VTA8_Anno <- read.delim(file.path(homer_dir, "VTA8_H3K27ac_annot.txt"), sep = "\t", header = TRUE)
+VTA9_Anno <- read.delim(file.path(homer_dir, "VTA9_H3K27ac_annot.txt"), sep = "\t", header = TRUE)
+STR8_Anno <- read.delim(file.path(homer_dir, "STR8_H3K27ac_annot.txt"), sep = "\t", header = TRUE)
+STR9_Anno <- read.delim(file.path(homer_dir, "STR9_H3K27ac_annot.txt"), sep = "\t", header = TRUE)
+
+# Load H3K27me3 Annotations
+CTX8_Anno_me3 <- read.delim(file.path(homer_dir, "CTX8_H3K27me3_annot.txt"), sep = "\t", header = TRUE)
+CTX9_Anno_me3 <- read.delim(file.path(homer_dir, "CTX9_H3K27me3_annot.txt"), sep = "\t", header = TRUE)
+PFC8_Anno_me3 <- read.delim(file.path(homer_dir, "PFC8_H3K27me3_annot.txt"), sep = "\t", header = TRUE)
+PFC9_Anno_me3 <- read.delim(file.path(homer_dir, "PFC9_H3K27me3_annot.txt"), sep = "\t", header = TRUE)
+HPP8_Anno_me3 <- read.delim(file.path(homer_dir, "HPP8_H3K27me3_annot.txt"), sep = "\t", header = TRUE)
+HPP9_Anno_me3 <- read.delim(file.path(homer_dir, "HPP9_H3K27me3_annot.txt"), sep = "\t", header = TRUE)
+VTA8_Anno_me3 <- read.delim(file.path(homer_dir, "VTA8_H3K27me3_annot.txt"), sep = "\t", header = TRUE)
+VTA9_Anno_me3 <- read.delim(file.path(homer_dir, "VTA9_H3K27me3_annot.txt"), sep = "\t", header = TRUE)
+STR8_Anno_me3 <- read.delim(file.path(homer_dir, "STR8_H3K27me3_annot.txt"), sep = "\t", header = TRUE)
+STR9_Anno_me3 <- read.delim(file.path(homer_dir, "STR9_H3K27me3_annot.txt"), sep = "\t", header = TRUE)
 
 ```
 
@@ -862,6 +935,122 @@ df_combined <- dfm1 %>%
 
 df_combined
 
+
+```
+
+# Package Versions
+
+```{r Save Package Version Info, echo=TRUE, message=TRUE, warning=FALSE}
+
+projdir <- "/home/avm27/Documents/Raw_Sequencing_Data/BrainRegionMicroglia/RegionalMicroglialTranscriptomicsandEpigenomics"
+
+#Record Package Versions Used in this analysis
+index9_packages <- c(
+  "AnnotationDbi",
+  "biomaRt",
+  "dplyr",
+  "GeneOverlap",
+  "ggplot2",
+  "kableExtra",
+  "knitr",
+  "org.Mm.eg.db",
+  "stringr",
+  "tidyr",
+  "workflowr"
+)
+
+# Retrieve Each Package Version
+get_package_version <- function(package_name) {
+
+  package_path <- find.package(
+    package_name,
+    quiet = TRUE
+  )
+
+  package_loaded <- package_name %in% loadedNamespaces()
+
+  if (length(package_path) == 0L) {
+    return(
+      data.frame(
+        package = package_name,
+        installed = FALSE,
+        loaded = FALSE,
+        version = NA_character_,
+        library_path = NA_character_,
+        stringsAsFactors = FALSE
+      )
+    )
+  }
+
+  package_path <- package_path[[1]]
+
+  data.frame(
+    package = package_name,
+    installed = TRUE,
+    loaded = package_loaded,
+    version = as.character(
+      utils::packageVersion(
+        package_name,
+        lib.loc = dirname(package_path)
+      )
+    ),
+    library_path = dirname(package_path),
+    stringsAsFactors = FALSE
+  )
+}
+
+
+# Collect Package and R Environment Versions
+index9_package_versions <- do.call(
+  rbind,
+  lapply(
+    index9_packages,
+    get_package_version
+  )
+)
+
+index9_environment_versions <- data.frame(
+  R_version = paste(
+    R.version$major,
+    R.version$minor,
+    sep = "."
+  ),
+  Bioconductor_version = if (
+    requireNamespace("BiocManager", quietly = TRUE)
+  ) {
+    as.character(BiocManager::version())
+  } else {
+    NA_character_
+  },
+  platform = R.version$platform,
+  stringsAsFactors = FALSE
+)
+
+
+# Save Version Records
+
+utils::write.csv(
+  index9_package_versions,
+  file = paste0(projdir, "/code/RPackageVersions/index9_package_versions.csv"),
+  row.names = FALSE
+)
+
+utils::write.csv(
+  index9_environment_versions,
+  file = paste0(projdir, "/code/RPackageVersions/index9_R_and_Bioconductor_versions.csv"),
+  row.names = FALSE
+)
+
+capture.output(
+  sessionInfo(),
+  file = paste0(projdir, "/code/RPackageVersions/index9_sessionInfo.txt")
+)
+
+
+
+# Print Results
+print(index9_environment_versions, row.names = FALSE)
+print(index9_package_versions, row.names = FALSE)
 
 ```
 

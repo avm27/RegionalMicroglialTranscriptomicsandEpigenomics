@@ -10,55 +10,60 @@ editor_options:
 
 
 ```{r}
-library(EnsDb.Mmusculus.v75)
+
+library(GenomicRanges)
+library(IRanges)
+library(S4Vectors)
+library(ChIPpeakAnno)
 library(ChIPseeker)
-library(clusterProfiler)
+library(TxDb.Mmusculus.UCSC.mm10.knownGene)
+library(chromVAR)
 library(AnnotationDbi)
 library(org.Mm.eg.db)
-library(TxDb.Mmusculus.UCSC.mm10.knownGene)
-library(ChIPpeakAnno)
-library(BSgenome.Mmusculus.UCSC.mm10)
-library(seqinr)
-library(dplyr)
-library(GenomicRanges)
-library(chromVAR)
-library(plyr)
-library(tibble)
 library(data.table)
-library(GenomicDistributions)
+library(plyr)
+library(dplyr)
+library(tibble)
+
+# Identify the repository root from the opened RStudio project
+projdir <- normalizePath(".", winslash = "/", mustWork = TRUE)
+
+project_file <- file.path(projdir, "RegionalMicroglialTranscriptomicsandEpigenomics.Rproj")
+
+if (!file.exists(project_file)) {
+  stop(
+    paste(
+      "The repository root could not be identified.",
+      "Open RegionalMicroglialTranscriptomicsandEpigenomics.Rproj",
+      "before running this analysis."
+    )
+  )
+}
 
 ```
 
 # Please Read Below
 
-In order to run this analysis, you must first download the corresponding peak files from https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE277753. You will need all peak bed files as well as associated BAM files placed into a folder in the data subdirectory, which you will need to create.
-
-To make this easier and less data intensive, we have provided a secondary option, which is to skip to "Skip to here if loading data" section of this script and utilize the RData we generated from the code below.
-
-The third and final option is to download the peak count matrices from the GEO link above.
+In order to run this analysis, you must first download the corresponding peak files from https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE277753. You will need all peak bed files as well as associated BAM files placed into a folder in the data subdirectory, which you will need to create. The BAM files required to regenerate the peak-count matrices are not included in this repository because of their size. The upstream processing chunks are retained with eval = FALSE to document how the matrices were generated. To reproduce those steps, download the corresponding peak files from GEO and to regenerate the BAM files from FASTQ and then place them in the directories specified below. Otherwise, begin at “Skip to here if loading data” using the provided RData file or use the supplied peak-count matrices in the downstream analyses.
 
 ```{r Extract Significant Peaks, eval=FALSE, message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
 
-#setwd("/home/avm27/Documents/Raw_Sequencing_Data/BrainRegionMicroglia/RegionalMicroglialTranscriptomicsandEpigenomics")
+projPath <- file.path(projdir, "data", "CATD_Peaks")
+mPeak <- GenomicRanges::GRanges()
 
-projPath="data/CATD_Peaks"
-mPeak = GRanges()
+histL <- c("PFC8-H3K27ac", "PFC9-H3K27ac", "STR8-H3K27ac", "STR9-H3K27ac", "HPP8-H3K27ac", "HPP9-H3K27ac", "VTA8-H3K27ac", "VTA9-H3K27ac", "CTX8-H3K27ac", "CTX9-H3K27ac", "PFC8-H3K27me3", "PFC9-H3K27me3", "STR8-H3K27me3", "STR9-H3K27me3", "HPP8-H3K27me3", "HPP9-H3K27me3", "VTA8-H3K27me3", "VTA9-H3K27me3", "CTX8-H3K27me3", "CTX9-H3K27me3")
 
-
-histL =c("PFC8-H3K27ac","PFC9-H3K27ac","STR8-H3K27ac", "STR9-H3K27ac", "HPP8-H3K27ac","HPP9-H3K27ac", "VTA8-H3K27ac","VTA9-H3K27ac", "CTX8-H3K27ac", "CTX9-H3K27ac", "PFC8-H3K27me3","PFC9-H3K27me3","STR8-H3K27me3", "STR9-H3K27me3", "HPP8-H3K27me3","HPP9-H3K27me3", "VTA8-H3K27me3", "VTA9-H3K27me3", "CTX8-H3K27me3", "CTX9-H3K27me3")
-
-
-for(hist in histL){
-    peakRes = read.table(paste0(projPath, "/", hist, "_dupMarked_merge_normalized_spikein_seacr_control.peaks.stringent.bed"), header = FALSE,
-                         fill = TRUE)
-    mPeak = GRanges(seqnames = peakRes$V1, IRanges(start = peakRes$V2, end = peakRes$V3), strand = "*") %>% append(mPeak, .)
+for (hist in histL) {
+  peak_file <- file.path(projPath, paste0(hist, "_dupMarked_merge_normalized_spikein_seacr_control.peaks.stringent.bed"))
+  peakRes <- read.table(peak_file, header = FALSE, fill = TRUE)
+  mPeak <- GenomicRanges::GRanges(seqnames = peakRes$V1, IRanges::IRanges(start = peakRes$V2, end = peakRes$V3), strand = "*") %>% append(mPeak, .)
 }
 
-masterPeak = GenomicRanges::reduce(mPeak)
+masterPeak <- GenomicRanges::reduce(mPeak)
+
 masterPeak
 
 ```
-
 
 ```{r Annotate Peaks, eval=FALSE, include=FALSE}
 
@@ -98,9 +103,10 @@ plotAnnoPie(peak.anno)
 ```
 
 
+
 ```{r Extract Fragments in Peaks, eval=FALSE, include=FALSE}
 
-bamDir="data/CATD_BAMs"
+bamDir="/home/avm27/Documents/Raw_Sequencing_Data/BR_Mic_CATD/HenikoffDataProcessing/alignment/bam"
 bamFile= paste0(bamDir, "/", "PFC8-H3K27ac_merged_dupMarked_subsample.sorted.bam")
 bamFile2= paste0(bamDir, "/", "PFC9-H3K27ac_merged_dupMarked_subsample.sorted.bam")
 bamFile3= paste0(bamDir, "/", "STR8-H3K27ac_merged_dupMarked_subsample.sorted.bam")
@@ -137,13 +143,17 @@ head(countMat)
 
 ```
 
-## Skip to here if loading data
+# Skip to here if loading data
 
 ```{r Load in Necessary R Data, eval=FALSE, include=FALSE}
 
-#save(countMat, fragment_counts, file="/home/avm27/Documents/Raw_Sequencing_Data/BrainRegionMicroglia/RegionalMicroglialTranscriptomicsandEpigenomics/data/CATD_DESeq_Data/GeneratingPeaksinFragments.RData")
+rdata_file <- file.path(projdir, "data", "CATD_DESeq_Data", "GeneratingPeaksinFragments.RData")
 
-load("data/CATD_DESeq_Data/GeneratingPeaksinFragments.RData")
+# Save the generated objects when rebuilding the count matrices
+#save(countMat, fragment_counts, file = rdata_file)
+
+# Load the previously generated objects when skipping the upstream processing
+load(rdata_file)
 
 ```
 
@@ -264,8 +274,278 @@ head(dfall_final_countmat)
 
 ```
 
-```{r SessionInfo, echo=TRUE}
+# Plot Combined PCA
 
+```{r}
+
+sample_names = c("PFC8.H3K27ac","PFC9.H3K27ac",
+                 "STR8.H3K27ac","STR9.H3K27ac",
+                 "HPP8.H3K27ac","HPP9.H3K27ac",
+                 "VTA8.H3K27ac","VTA9.H3K27ac",
+                 "CTX8.H3K27ac","CTX9.H3K27ac",
+                 "PFC8.H3K27me3","PFC9.H3K27me3",
+                 "STR8.H3K27me3","STR9.H3K27me3",
+                 "HPP8.H3K27me3","HPP9.H3K27me3",
+                 "VTA8.H3K27me3","VTA9.H3K27me3",
+                 "CTX8.H3K27me3","CTX9.H3K27me3")
+
+colnames(countMat) = sample_names
+
+# Load Sample Information
+
+colData <- read.csv(paste0(basepath,"data/CATD_DESeq_Data/sample_info_combined.csv"),
+                    sep = ",", row.names = 1)
+
+# Match Count Matrix and Sample Information
+
+all(rownames(colData) %in% colnames(countMat))
+
+peak_counts <- countMat[,rownames(colData)]
+
+all(rownames(colData) == colnames(peak_counts))
+
+# Remove Empty Peaks
+
+keep_peak <- rowSums(peak_counts) > 0
+
+peak_counts <- peak_counts[keep_peak,]
+
+# Create DESeq2 Object and Normalize Counts
+
+dds_peak <- DESeq2::DESeqDataSetFromMatrix(countData = peak_counts,
+                                           colData = colData,
+                                           design = ~mark)
+
+dds_peak <- DESeq2::estimateSizeFactors(dds_peak)
+
+peak_raw <- as.matrix(DESeq2::counts(dds_peak, normalized = FALSE))
+
+peak_normalized <- as.matrix(DESeq2::counts(dds_peak, normalized = TRUE))
+
+# Calculate Peak Variance
+
+peak_variance <- matrixStats::rowVars(peak_raw)
+
+keep_variance <- is.finite(peak_variance) & peak_variance > 0
+
+peak_variance <- peak_variance[keep_variance]
+
+peak_normalized_use <- peak_normalized[keep_variance,]
+
+# Select Top 100 Variable Peaks
+
+ntop = 100
+
+top_idx <- order(peak_variance, decreasing = TRUE)[1:ntop]
+
+top_peak_names <- rownames(peak_normalized_use)[top_idx]
+
+pca_matrix <- peak_normalized_use[top_idx,]
+
+# Run PCA
+
+pca <- stats::prcomp(t(pca_matrix),
+                     center = TRUE,
+                     scale. = FALSE)
+
+percent_var <- 100 * (pca$sdev^2 / sum(pca$sdev^2))
+
+pca_data <- data.frame(sample = rownames(pca$x),
+                       PC1 = pca$x[,"PC1"],
+                       PC2 = pca$x[,"PC2"])
+
+pca_data$condition <- colData[pca_data$sample,"condition"]
+
+pca_data$mark <- colData[pca_data$sample,"mark"]
+
+custom_colors <- c("CTX" = "#FF9289",
+                   "HPP" = "#FF8AFF",
+                   "PFC" = "#00DB98",
+                   "STR" = "#00CBFF",
+                   "VTA" = "#BEC100")
+
+ann_colors <- list(
+  condition = c(PreFrontalCortex = "#00DB98",
+                Striatum = "#00CBFF",
+                VTA = "#BEC100",
+                Cortex = "#FF9289",
+                Hippocampus = "#FF8AFF"),
+
+  Group = c(PreFrontalCortex = "#00DB98",
+            Striatum = "#00CBFF",
+            VTA = "#BEC100",
+            Cortex = "#FF9289",
+            Hippocampus = "#FF8AFF"),
+
+  mark = c(K27ac = "#FF4D00",
+           K27me3 = "#9370DB")
+)
+
+
+# Plot PCA
+
+pca_plot <- ggplot2::ggplot(pca_data,
+                            ggplot2::aes(x = PC1,
+                                         y = PC2,
+                                         color = condition,
+                                         shape = mark)) +
+  ggplot2::geom_point(size = 3) +
+  ggrepel::geom_label_repel(ggplot2::aes(label = sample),
+                            fill = "white",
+                            size = 3,
+                            show.legend = FALSE,
+                            max.overlaps = Inf) +
+  ggplot2::scale_color_manual(values = ann_colors$condition) +
+  ggplot2::scale_shape_manual(values = c(K27ac = 16,
+                                         K27me3 = 17)) +
+  ggplot2::labs(x = paste0("PC1: ", round(percent_var[1], 1), "% variance"),
+                y = paste0("PC2: ", round(percent_var[2], 1), "% variance"),
+                title = "Principal Components Analysis (PCA)",
+                color = "Condition",
+                shape = "Histone Mark") +
+  ggplot2::theme_bw(base_size = 12)
+
+
+# Print Results
+
+print(pca_plot)
+
+## Save Results
+
+#pdf(paste0(basepath, "output/CATD_DEPGs/Combined/BRMic_PCA_CATDCombined_DEPGs_Final.pdf"), width = 8, height = 8)
+
+#pca_plot
+
+#dev.off()
+
+
+```
+
+# Package Versions
+
+```{r Save Package Version Info, echo=TRUE, message=TRUE, warning=FALSE}
+
+projdir <- "/home/avm27/Documents/Raw_Sequencing_Data/BrainRegionMicroglia/RegionalMicroglialTranscriptomicsandEpigenomics"
+
+#Record Package Versions Used in this analysis
+index3_packages <- sort(
+  unique(
+    c(
+      "AnnotationDbi",
+      "ChIPpeakAnno",
+      "ChIPseeker",
+      "chromVAR",
+      "data.table",
+      "dplyr",
+      "GenomicRanges",
+      "IRanges",
+      "org.Mm.eg.db",
+      "plyr",
+      "S4Vectors",
+      "tibble",
+      "TxDb.Mmusculus.UCSC.mm10.knownGene",
+      "workflowr"
+    )
+  )
+)
+
+# Retrieve Each Package Version
+get_package_version <- function(package_name) {
+
+  package_path <- find.package(
+    package_name,
+    quiet = TRUE
+  )
+
+  package_loaded <- package_name %in% loadedNamespaces()
+
+  if (length(package_path) == 0L) {
+    return(
+      data.frame(
+        package = package_name,
+        installed = FALSE,
+        loaded = FALSE,
+        version = NA_character_,
+        library_path = NA_character_,
+        stringsAsFactors = FALSE
+      )
+    )
+  }
+
+  package_path <- package_path[[1]]
+
+  data.frame(
+    package = package_name,
+    installed = TRUE,
+    loaded = package_loaded,
+    version = as.character(
+      utils::packageVersion(
+        package_name,
+        lib.loc = dirname(package_path)
+      )
+    ),
+    library_path = dirname(package_path),
+    stringsAsFactors = FALSE
+  )
+}
+
+
+# Collect Package and R Environment Versions
+index3_package_versions <- do.call(
+  rbind,
+  lapply(
+    index3_packages,
+    get_package_version
+  )
+)
+
+index3_environment_versions <- data.frame(
+  R_version = paste(
+    R.version$major,
+    R.version$minor,
+    sep = "."
+  ),
+  Bioconductor_version = if (
+    requireNamespace("BiocManager", quietly = TRUE)
+  ) {
+    as.character(BiocManager::version())
+  } else {
+    NA_character_
+  },
+  platform = R.version$platform,
+  stringsAsFactors = FALSE
+)
+
+
+# Save Version Records
+
+utils::write.csv(
+  index3_package_versions,
+  file = paste0(projdir, "/code/RPackageVersions/index3_package_versions.csv"),
+  row.names = FALSE
+)
+
+utils::write.csv(
+  index3_environment_versions,
+  file = paste0(projdir, "/code/RPackageVersions/index3_R_and_Bioconductor_versions.csv"),
+  row.names = FALSE
+)
+
+capture.output(
+  sessionInfo(),
+  file = paste0(projdir, "/code/RPackageVersions/index3_sessionInfo.txt")
+)
+
+
+
+# Print Results
+print(index3_environment_versions, row.names = FALSE)
+print(index3_package_versions, row.names = FALSE)
+
+```
+
+# Session Info
+
+```{r Print Session Info, echo=TRUE, message=TRUE, warning=FALSE}
 sessionInfo()
-
 ```

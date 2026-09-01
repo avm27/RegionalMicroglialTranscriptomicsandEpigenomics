@@ -1,0 +1,7 @@
+"package","installed","loaded","version","library_path"
+"ggplot2",TRUE,TRUE,"3.5.1","/home/avm27/R/x86_64-pc-linux-gnu-library/4.2"
+"knitr",TRUE,TRUE,"1.51","/home/avm27/R/x86_64-pc-linux-gnu-library/4.2"
+"patchwork",TRUE,TRUE,"1.2.0.9000","/home/avm27/R/x86_64-pc-linux-gnu-library/4.2"
+"rtracklayer",TRUE,TRUE,"1.58.0","/home/avm27/R/x86_64-pc-linux-gnu-library/4.2"
+"TrackPlotR",TRUE,TRUE,"0.0.1","/home/avm27/R/x86_64-pc-linux-gnu-library/4.2"
+"workflowr",TRUE,FALSE,"1.7.0","/home/avm27/R/x86_64-pc-linux-gnu-library/4.2"

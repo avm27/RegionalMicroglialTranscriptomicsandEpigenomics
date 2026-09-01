@@ -11,76 +11,27 @@ editor_options:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 
-
-library(gprofiler2)
-library(DESeq2)
-library(ggplot2)
-library(clusterProfiler)
-library(biomaRt)
-library(ReactomePA)
-library(DOSE)
 options(connectionObserver = NULL)
-library(org.Mm.eg.db)
-library(tximport)
-library(ggsci)
-library(pheatmap)
-library(genefilter)
-library(RColorBrewer)
-library(GO.db)
-library(topGO)
-library(dplyr)
-library(gage)
-library(pathview)
-library(WGCNA)
-library(tidyr)
-library(enrichplot)
-library(ggnewscale)
-library(SPIA)
-library(ggpubr)
-library(apeglm)
-library(GOSemSim)
-library(edgeR)
-library(statmod)
-library(org.Mm.eg.db)
-library(tidyverse)
-library(pheatmap)
-library(gplots)
-library(Mus.musculus)
-library(Glimma)
-library(RColorBrewer)
-library(clusterProfiler)
-library(ReactomePA)
-library(enrichplot)
-library(ggnewscale)
-library(knitr)
-library(tables)
-library(vidger)
-library(kableExtra)
-library(regionReport)
-
-# Load required packages
-library(dplyr)
-library(tidyr)
-library(ggplot2)
-library(ggrepel)
-library(RColorBrewer)
-library(pheatmap)
-library(reshape2)
-
-#BiocManager::install("rrvgo")
-library(rrvgo)
-library(dplyr)
-library(stringr)
-
-
-library(ggplot2)
-library(data.table)
-library(scales)
-library(patchwork)
 
 library(DESeq2)
-library(ComplexUpset)
+library(SummarizedExperiment)
+library(S4Vectors)
+library(AnnotationDbi)
+library(org.Mm.eg.db)
+library(clusterProfiler)
+library(rrvgo)
+library(data.table)
+library(dplyr)
+library(tidyr)
 library(tibble)
+library(stringr)
+library(ggplot2)
+library(RColorBrewer)
+library(patchwork)
+library(ComplexUpset)
+library(grid)
+library(knitr)
+library(kableExtra)
 
 ```
 
@@ -108,11 +59,6 @@ Alexander V. Margetts1-3, Samara J. Vilca1-2, Lauren L. Bystrom1-2,  Florence Bo
 
 </center>
 
-# Abstract
-
-Abstract
-Microglia, the innate immune cells in the central nervous system, exhibit distinct transcriptional profiles across brain regions that are important for facilitating their specialized function. There has been recent interest in identifying the epigenetic modifications associated with these distinct transcriptional profiles, as these may improve our understanding of the underlying mechanisms governing the functional specialization of microglia. One obstacle to achieving this goal is the large number of microglia required to obtain a genome-wide profile for a single histone modification. Given the cellular and regional heterogeneity of the brain, this would require pooling many samples which would impede biological applications that are limited by numbers of available animals. To overcome this obstacle, we have adapted a method of chromatin profiling known as Cleavage Under Targets and Tagmentation (CUT&Tag-Direct) to profile histone modifications associated with regional differences in gene expression throughout the brain reward system. Consistent with previous studies, we find that transcriptional profiles of microglia vary by brain region. However, here we report that these regional differences also exhibit transcriptional network signatures specific to each region. Additionally, we find that these region-dependent network signatures are associated with differential deposition of H3K27ac and H3K7me3, and while the H3K27me3 landscape is remarkably stable across brain regions, the H3K27ac landscape is most consistent with the anatomical location of microglia which explain their distinct transcriptional profiles. Altogether, these findings underscore the established role of H3K27me3 in cell fate determination and support the active role of H3K27ac in the dynamic regulation of microglial gene expression. In this study, we report a molecular and computational framework that can be applied to improve our understanding of the role of epigenetic regulation in microglia in both health and disease, using as few as 2,500 cells per histone mark.
-
 # DESeq2 Analysis
 
 ## Setup and Analysis
@@ -120,7 +66,6 @@ Building DESeq2 input files from gene count matrices output by String Tie.
 
 ```{r DESeq2 Build, message=FALSE, warning=FALSE, include=FALSE}
 ## Run DEeq2 from Matrix output using Stringtie to compare all groups
-setwd("/home/avm27/Documents/Raw_Sequencing_Data/BrainRegionMicroglia/RegionalMicroglialTranscriptomicsandEpigenomics")
 
 colData <- read.csv("data/RNASeq_DESeq_Data/sample_info_mic_br.csv", sep = ",", row.names = 1)
 #colData <- read.csv("data/RNASeq_DESeq_Data/sample_info_mic_br_WO_CTX.csv", sep = ",", row.names = 1)
@@ -145,7 +90,7 @@ countData <- countData[, rownames(colData)]
 
 ```
 
-Running DeSeq2 analysis with factor levels of All vs Sugar, All vs Morphine, and Allvs Withdrawal.
+Running DeSeq2 analysis with different factor levels.
 
 ```{r DESeq2 Analysis, echo=FALSE, message=FALSE, warning=FALSE}
 dds <- DESeqDataSetFromMatrix(countData = countData, colData = colData, design = ~condition)
@@ -832,7 +777,7 @@ ggplot(pcaData2, aes(PC1, PC2, color=condition, label = colnames(dds))) +
   #scale_x_continuous(limits = c(-80, 50)) +
   xlab(paste0("PC1: ",percentVar2[1],"% variance")) +
   ylab(paste0("PC2: ",percentVar2[2],"% variance")) + 
-  ggrepel::geom_label_repel(box.padding = 6, max.overlaps = Inf) +
+  ggrepel::geom_label_repel(box.padding = 6, max.overlaps = Inf, seed =123) +
   coord_fixed() +
   scale_color_manual(values = custom_colors) + 
   ggtitle(label = "Principal Component Analysis (PCA)", 
@@ -887,7 +832,7 @@ ggplot(pcaData_NOHPP, aes(PC1, PC2, color=condition, label = colnames(dds_PCA_No
   scale_x_continuous(limits = c(-10, 10)) +
   xlab(paste0("PC1: ",percentVar_NOHPP[1],"% variance")) +
   ylab(paste0("PC2: ",percentVar_NOHPP[2],"% variance")) + 
-  ggrepel::geom_label_repel(box.padding = 1, max.overlaps = Inf) +
+  ggrepel::geom_label_repel(box.padding = 1, max.overlaps = Inf, seed =123) +
   coord_fixed() +
   scale_color_manual(values = custom_colors_NOHPP) +  
   ggtitle(label = "Principal Component Analysis (PCA)", 
@@ -2179,6 +2124,137 @@ print(p_BPMF)
 #print(p_BPMF)
 #dev.off()
 
+
+```
+
+# Package Versions
+
+```{r Save Package Version Info, echo=TRUE, message=TRUE, warning=FALSE}
+
+projdir <- "/home/avm27/Documents/Raw_Sequencing_Data/BrainRegionMicroglia/RegionalMicroglialTranscriptomicsandEpigenomics"
+
+#Record Package Versions Used in this analysis
+index_packages <- sort(
+  unique(
+    c(
+      "AnnotationDbi",
+      "clusterProfiler",
+      "ComplexUpset",
+      "data.table",
+      "DESeq2",
+      "dplyr",
+      "ggplot2",
+      "ggrepel",
+      "kableExtra",
+      "knitr",
+      "org.Mm.eg.db",
+      "patchwork",
+      "pheatmap",
+      "RColorBrewer",
+      "rrvgo",
+      "S4Vectors",
+      "stringr",
+      "SummarizedExperiment",
+      "tibble",
+      "tidyr",
+      "workflowr"
+    )
+  )
+)
+
+
+# Retrieve Each Package Version
+get_package_version <- function(package_name) {
+
+  package_path <- find.package(
+    package_name,
+    quiet = TRUE
+  )
+
+  package_loaded <- package_name %in% loadedNamespaces()
+
+  if (length(package_path) == 0L) {
+    return(
+      data.frame(
+        package = package_name,
+        installed = FALSE,
+        loaded = FALSE,
+        version = NA_character_,
+        library_path = NA_character_,
+        stringsAsFactors = FALSE
+      )
+    )
+  }
+
+  package_path <- package_path[[1]]
+
+  data.frame(
+    package = package_name,
+    installed = TRUE,
+    loaded = package_loaded,
+    version = as.character(
+      utils::packageVersion(
+        package_name,
+        lib.loc = dirname(package_path)
+      )
+    ),
+    library_path = dirname(package_path),
+    stringsAsFactors = FALSE
+  )
+}
+
+
+# Collect Package and R Environment Versions
+index_package_versions <- do.call(
+  rbind,
+  lapply(
+    index_packages,
+    get_package_version
+  )
+)
+
+r_environment_versions <- data.frame(
+  R_version = paste(
+    R.version$major,
+    R.version$minor,
+    sep = "."
+  ),
+  Bioconductor_version = if (
+    requireNamespace("BiocManager", quietly = TRUE)
+  ) {
+    as.character(BiocManager::version())
+  } else {
+    NA_character_
+  },
+  platform = R.version$platform,
+  stringsAsFactors = FALSE
+)
+
+
+# Save Version Records
+
+utils::write.csv(
+  index_package_versions,
+  file = paste0(projdir, "/code/RPackageVersions/index_package_versions.csv"),
+  row.names = FALSE
+)
+
+utils::write.csv(
+  r_environment_versions,
+  file = paste0(projdir, "/code/RPackageVersions/index_R_and_Bioconductor_versions.csv"),
+  row.names = FALSE
+)
+
+capture.output(
+  sessionInfo(),
+  file = paste0(projdir, "/code/RPackageVersions/index_sessionInfo.txt")
+)
+
+
+
+# Print Results
+print(r_environment_versions, row.names = FALSE)
+print(index_package_versions, row.names = FALSE)
 
 ```
 

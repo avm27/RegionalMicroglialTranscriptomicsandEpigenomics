@@ -10,71 +10,32 @@ editor_options:
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(eval = FALSE, include = FALSE)
-if (!("DESeq2" %in% installed.packages())) {
-  # Install this package if it isn't installed yet
-  BiocManager::install("DESeq2", update = FALSE)
-}
 
-if (!("impute" %in% installed.packages())) {
-  # Install this package if it isn't installed yet
-  BiocManager::install("impute")
-}
-
-if (!("WGCNA" %in% installed.packages())) {
-  # Install this package if it isn't installed yet
-  install.packages("WGCNA")
-}
-
-if (!("ggforce" %in% installed.packages())) {
-  # Install this package if it isn't installed yet
-  install.packages("ggforce")
-}
-
-if (!("ComplexHeatmap" %in% installed.packages())) {
-  # Install this package if it isn't installed yet
-  BiocManager::install("ComplexHeatmap")
-}
-
-
-# Attach the DESeq2 library
 library(BiocParallel)
-
-library(conflicted)
-
-# We will need this so we can use the pipe: %>%
-library(magrittr)
-
-# We'll need this for finding gene modules
-library(WGCNA)
-
-# Attach the DESeq2 library
 library(DESeq2)
-
-# We will need this so we can use the pipe: %>%
-library(magrittr)
-
-# We'll be making some plots
-library(ggplot2)
-
-# Need this for annotations
-library(org.Mm.eg.db)
-
-# Need this for annotations
+library(SummarizedExperiment)
+library(WGCNA)
+library(dynamicTreeCut)
+library(fastcluster)
+library(conflicted)
+library(dplyr)
+library(tidyr)
 library(AnnotationDbi)
-
-# Need this for plotting GO enrichment
-library(enrichplot)
-
-# Need this for analyzing GO enrichment
+library(org.Mm.eg.db)
 library(clusterProfiler)
+library(ReactomePA)
+library(enrichplot)
+library(ggplot2)
+library(igraph)
 
 register(DoparParam())
 register(MulticoreParam())
-registered() 
-#bpparam("SnowParam")
+registered()
+
 options(warn = 0)
-allowWGCNAThreads()
 options(stringsAsFactors = FALSE)
+
+allowWGCNAThreads()
 
 ```
 
@@ -82,46 +43,37 @@ options(stringsAsFactors = FALSE)
 # Load and Setup Data
 ## Setting up Working Directory
 ```{r Read In Files, message=FALSE, warning=FALSE, include=FALSE}
-# Set Working Directory
+# Identify the repository root from the opened RStudio project
+projdir <- normalizePath(".", winslash = "/", mustWork = TRUE)
 
-setwd("/home/avm27/Documents/Raw_Sequencing_Data/BrainRegionMicroglia/RegionalMicroglialTranscriptomicsandEpigenomics")
+project_file <- file.path(projdir, "RegionalMicroglialTranscriptomicsandEpigenomics.Rproj")
 
-projdir <- "/home/avm27/Documents/Raw_Sequencing_Data/BrainRegionMicroglia/RegionalMicroglialTranscriptomicsandEpigenomics"
-
-# Define the file path to the plots directory
-plots_dir <- paste0(projdir, "/output/WGCNA/plots")
-
-# Create the plots folder if it doesn't exist
-if (!dir.exists(plots_dir)) {
-  dir.create(plots_dir)
+if (!file.exists(project_file)) {
+  stop(
+    paste(
+      "The repository root could not be identified.",
+      "Open RegionalMicroglialTranscriptomicsandEpigenomics.Rproj",
+      "before running this analysis."
+    )
+  )
 }
 
-# Define the file path to the results directory
-results_dir <- paste0(projdir, "/output/WGCNA/results")
+# Define Output Directories
+plots_dir <- file.path(projdir, "output", "WGCNA", "plots")
+results_dir <- file.path(projdir, "output", "WGCNA", "results")
+rdata_dir <- file.path(projdir, "output", "WGCNA", "r_data")
 
-# Create the results folder if it doesn't exist
-if (!dir.exists(results_dir)) {
-  dir.create(results_dir)
-}
+# Create Output Directories
+dir.create(plots_dir, recursive = TRUE, showWarnings = FALSE)
+dir.create(results_dir, recursive = TRUE, showWarnings = FALSE)
+dir.create(rdata_dir, recursive = TRUE, showWarnings = FALSE)
 
-# Define the file path to the results directory
-rdata_dir <- paste0(projdir, "/output/WGCNA/r_data")
+# Define Input Files
+data_dir <- file.path(projdir, "data", "RNASeq_WGCNA")
+data_file <- file.path(data_dir, "BRMIC_gene_count_matrix.csv")
+metadata_file <- file.path(data_dir, "BRMIC_Metadata.tsv")
 
-# Create the results folder if it doesn't exist
-if (!dir.exists(rdata_dir)) {
-  dir.create(rdata_dir)
-}
-
-
-# Define the file path to the data directory
-data_dir <- file.path("data", "RNASeq_WGCNA")
-
-# Declare the file path to the gene expression matrix file
-data_file <- file.path(paste0(projdir,"/", data_dir), "BRMIC_gene_count_matrix.csv")
-
-# Declare the file path to the metadata file
-metadata_file <- file.path(paste0(projdir,"/", data_dir), "BRMIC_Metadata.tsv")
-
+# Confirm Required Input Files Exist
 file.exists(data_file)
 file.exists(metadata_file)
 
@@ -374,7 +326,6 @@ cex.axis = 1.5, cex.main = 2)
 
 ################################## BICOR Hybrid ######################################
 ########################### Select this one with a Power of 7 ########################
-library(conflicted)
 conflict_prefer("cor", "WGCNA")
 temp_cor <- cor
 cor <- WGCNA::bicor
@@ -871,8 +822,6 @@ cg.simplified.final <- as.data.frame(cg_simplified)
 filtered_cg_final <- subset(cg.final, ONTOLOGY == "BP" | ONTOLOGY == "CC")
 filtered_cg_simplified_final <- subset(cg.simplified.final, ONTOLOGY == "BP" | ONTOLOGY == "CC")
 
-library(dplyr)
-
 top5_per_cluster <- filtered_cg_final %>%
   group_by(Cluster) %>%
   arrange(p.adjust, .by_group = TRUE) %>%
@@ -953,12 +902,6 @@ S2+scale_size(range = c(2, 8))
 ## Making Module Networks
 
 ```{r fig.height=15, fig.width=15}
-
-library(dplyr)
-library(tidyr)
-library(igraph)
-
-############# New Method (https://github.com/pgugger/TranscriptomeAnalysis/blob/master/Exercise3.md)  (Better Site: https://www.biostars.org/p/285296/)
 
 gene.names = names(datExpr)
 modGenes <- list()
@@ -1092,7 +1035,6 @@ for (mod in modules_significant) {
 
 }
 
-library(igraph)
 
 scale01 <- function(x) {
   (x - min(x)) / (max(x) - min(x))
@@ -1205,6 +1147,139 @@ for (mod in modules_significant) {
 
 
 #dev.off()
+
+```
+
+# Package Versions
+
+```{r Save Package Version Info, echo=TRUE, message=TRUE, warning=FALSE}
+
+projdir <- "/home/avm27/Documents/Raw_Sequencing_Data/BrainRegionMicroglia/RegionalMicroglialTranscriptomicsandEpigenomics"
+
+#Record Package Versions Used in this analysis
+index2_packages <- sort(
+  unique(
+    c(
+      "AnnotationDbi",
+      "BiocParallel",
+      "clusterProfiler",
+      "conflicted",
+      "DESeq2",
+      "dplyr",
+      "dynamicTreeCut",
+      "enrichplot",
+      "fastcluster",
+      "ggforce",
+      "ggplot2",
+      "igraph",
+      "knitr",
+      "limma",
+      "org.Mm.eg.db",
+      "ReactomePA",
+      "readr",
+      "stringr",
+      "SummarizedExperiment",
+      "tibble",
+      "tidyr",
+      "WGCNA",
+      "workflowr"
+    )
+  )
+)
+
+
+# Retrieve Each Package Version
+get_package_version <- function(package_name) {
+
+  package_path <- find.package(
+    package_name,
+    quiet = TRUE
+  )
+
+  package_loaded <- package_name %in% loadedNamespaces()
+
+  if (length(package_path) == 0L) {
+    return(
+      data.frame(
+        package = package_name,
+        installed = FALSE,
+        loaded = FALSE,
+        version = NA_character_,
+        library_path = NA_character_,
+        stringsAsFactors = FALSE
+      )
+    )
+  }
+
+  package_path <- package_path[[1]]
+
+  data.frame(
+    package = package_name,
+    installed = TRUE,
+    loaded = package_loaded,
+    version = as.character(
+      utils::packageVersion(
+        package_name,
+        lib.loc = dirname(package_path)
+      )
+    ),
+    library_path = dirname(package_path),
+    stringsAsFactors = FALSE
+  )
+}
+
+
+# Collect Package and R Environment Versions
+index2_package_versions <- do.call(
+  rbind,
+  lapply(
+    index2_packages,
+    get_package_version
+  )
+)
+
+index2_environment_versions <- data.frame(
+  R_version = paste(
+    R.version$major,
+    R.version$minor,
+    sep = "."
+  ),
+  Bioconductor_version = if (
+    requireNamespace("BiocManager", quietly = TRUE)
+  ) {
+    as.character(BiocManager::version())
+  } else {
+    NA_character_
+  },
+  platform = R.version$platform,
+  stringsAsFactors = FALSE
+)
+
+
+# Save Version Records
+
+utils::write.csv(
+  index2_package_versions,
+  file = paste0(projdir, "/code/RPackageVersions/index2_package_versions.csv"),
+  row.names = FALSE
+)
+
+utils::write.csv(
+  index2_environment_versions,
+  file = paste0(projdir, "/code/RPackageVersions/index2_R_and_Bioconductor_versions.csv"),
+  row.names = FALSE
+)
+
+capture.output(
+  sessionInfo(),
+  file = paste0(projdir, "/code/RPackageVersions/index2_sessionInfo.txt")
+)
+
+
+
+# Print Results
+print(index2_environment_versions, row.names = FALSE)
+print(index2_package_versions, row.names = FALSE)
 
 ```
 
